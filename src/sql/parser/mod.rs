@@ -339,7 +339,12 @@ mod tests {
     fn test_parser_select() -> Result<()> {
         let sql = "select * from tab1;";
         let stm = Parser::new(sql).parse()?;
-        println!("{:?}", stm);
+        assert_eq!(
+            stm,
+            ast::Statement::Select {
+                table_name: "tab1".to_string()
+            }
+        );
         Ok(())
     }
 }
