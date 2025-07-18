@@ -1,6 +1,6 @@
 use crate::{
     error::Result,
-    sql::{parser::Parser, plan::Plan, schema::Table, types::Row},
+    sql::{executor::ResultSet, parser::Parser, plan::Plan, schema::Table, types::Row},
 };
 
 mod kv;
@@ -44,7 +44,7 @@ pub struct Session<E: Engine> {
 
 impl<E: Engine> Session<E> {
     // 执行客户端 SQL 语句
-    pub fn execute(&self, sql: &str) -> Result<()> {
+    pub fn execute(&self, sql: &str) -> Result<ResultSet> {
         match Parser::new(sql).parse()? {
             stmt => {
                 let mut txn = self.engin.begin()?;
