@@ -14,7 +14,7 @@ mod schema;
 
 // 执行器定义
 pub trait Executor<T: Transaction> {
-    fn execute(&self, txn: &mut T) -> Result<ResultSet>;
+    fn execute(self: Box<Self>, txn: &mut T) -> Result<ResultSet>;
 }
 
 impl<T: Transaction> dyn Executor<T> {
@@ -32,8 +32,9 @@ impl<T: Transaction> dyn Executor<T> {
 }
 
 // 执行结果集
+#[derive(Debug)]
 pub enum ResultSet {
     CreateTable { table_name: String },
     Insert { count: usize },
-    Scan { rows: Vec<String>, row: Vec<Row> },
+    Scan { columns: Vec<String>, rows: Vec<Row> },
 }

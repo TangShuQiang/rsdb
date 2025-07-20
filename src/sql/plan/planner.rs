@@ -49,7 +49,7 @@ impl Planner {
                 columns: columns.unwrap_or_default(),
                 values,
             },
-            ast::Statement::Select { table_name, .. } => Node::Scan { table_name },
+            ast::Statement::Select { table_name } => Node::Scan { table_name },
         }
     }
 }
