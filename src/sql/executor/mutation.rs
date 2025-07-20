@@ -49,7 +49,6 @@ impl<T: Transaction> Executor<T> for Insert {
                 make_row(&table, &self.columns, &row)?
             };
             // 插入数据
-            println!("insert row: {:?}", insert_row);
             txn.create_row(self.table_name.clone(), insert_row)?;
             count += 1;
         }
