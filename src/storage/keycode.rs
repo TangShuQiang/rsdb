@@ -56,7 +56,8 @@ impl<'a> ser::Serializer for &'a mut Serializer {
     }
 
     fn serialize_i64(self, v: i64) -> Result<()> {
-        todo!()
+        self.output.extend(v.to_be_bytes());
+        Ok(())
     }
 
     fn serialize_u8(self, v: u8) -> Result<()> {
@@ -89,7 +90,8 @@ impl<'a> ser::Serializer for &'a mut Serializer {
     }
 
     fn serialize_str(self, v: &str) -> Result<()> {
-        todo!()
+        self.output.extend(v.as_bytes());
+        Ok(())
     }
 
     // 原始值           编码后
@@ -335,7 +337,9 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     where
         V: de::Visitor<'de>,
     {
-        todo!()
+        let bytes = self.take_bytes(8);
+        let v = i64::from_be_bytes(bytes.try_into()?);
+        visitor.visit_i64(v)
     }
 
     fn deserialize_u8<V>(self, visitor: V) -> Result<V::Value>
@@ -395,7 +399,8 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     where
         V: de::Visitor<'de>,
     {
-        todo!()
+        let bytes = self.next_bytes()?;
+        visitor.visit_str(&String::from_utf8(bytes)?)
     }
 
     fn deserialize_string<V>(self, visitor: V) -> Result<V::Value>

@@ -24,10 +24,11 @@ pub struct Column {
     pub datatype: DataType,
     pub nullable: Option<bool>,
     pub default: Option<Expression>,
+    pub primary_key: bool,
 }
 
 // 表达式定义，目前只有常量
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Expression {
     Consts(Consts),
 }
@@ -38,7 +39,7 @@ impl From<Consts> for Expression {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Consts {
     Null,
     Boolean(bool),

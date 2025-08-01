@@ -7,7 +7,7 @@ use crate::{
         schema::Table,
         types::{Row, Value},
     },
-    storage::{self, engine::Engine as StorageEngine},
+    storage::{self, engine::Engine as StorageEngine, keycode::serialize_key},
 };
 
 // KV Engin 定义
@@ -52,11 +52,11 @@ impl<E: StorageEngine> KVTransaction<E> {
 
 impl<E: StorageEngine> Transaction for KVTransaction<E> {
     fn commit(&self) -> Result<()> {
-        Ok(())
+        self.txn.commit()
     }
 
     fn rollback(&self) -> Result<()> {
-        Ok(())
+        self.txn.rollback()
     }
 
     fn create_row(&self, table_name: String, row: Row) -> Result<()> {
@@ -80,11 +80,19 @@ impl<E: StorageEngine> Transaction for KVTransaction<E> {
                 _ => continue,
             }
         }
+        // 找到表中的主键作为一行数据的唯一标识
+        let pk = table.get_primary_key(&row)?;
+        // 查看主键对应的数据是否已经存在了
+        let id = Key::Row(table_name.clone(), pk.clone()).encode()?;
+        if self.txn.get(id.clone())?.is_some() {
+            return Err(Error::Internal(format!(
+                "Duplicate data for primary key {:?} in table {}",
+                pk, table_name
+            )));
+        }
         // 存放数据
-        // 暂时以第一列作为主键
-        let id = Key::Row(table_name.clone(), row[0].clone());
         let value = bincode::serialize(&row)?;
-        self.txn.set(bincode::serialize(&id)?, value)?;
+        self.txn.set(id, value)?;
         Ok(())
     }
 
@@ -108,23 +116,18 @@ impl<E: StorageEngine> Transaction for KVTransaction<E> {
             )));
         }
         // 判断表的有效性
-        if table.columns.is_empty() {
-            return Err(Error::Internal(format!(
-                "table {} has no columns",
-                table.name
-            )));
-        }
-        let key = Key::Table(table.name.clone());
+        table.validate()?;
+        let key = Key::Table(table.name.clone()).encode()?;
         let value = bincode::serialize(&table)?;
-        self.txn.set(bincode::serialize(&key)?, value)?;
+        self.txn.set(key, value)?;
         Ok(())
     }
 
     fn get_table(&self, table_name: String) -> Result<Option<Table>> {
-        let key = Key::Table(table_name);
+        let key = Key::Table(table_name).encode()?;
         Ok(self
             .txn
-            .get(bincode::serialize(&key)?)?
+            .get(key)?
             .map(|v| bincode::deserialize(&v))
             .transpose()?)
     }
@@ -136,10 +139,22 @@ enum Key {
     Row(String, Value),
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+impl Key {
+    pub fn encode(&self) -> Result<Vec<u8>> {
+        serialize_key(self)
+    }
+}
+
+#[derive(Debug, Serialize)]
 enum KeyPrefix {
     Table,
     Row(String),
+}
+
+impl KeyPrefix {
+    pub fn encode(&self) -> Result<Vec<u8>> {
+        serialize_key(self)
+    }
 }
 
 #[cfg(test)]
@@ -155,7 +170,7 @@ mod tests {
         let kvengine = KVEngine::new(MemoryEngine::new());
         let s = kvengine.session()?;
 
-        s.execute("create table t1 (a int, b text default 'vv', c integer default 100);")?;
+        s.execute("create table t1 (a int primary key, b text default 'vv', c integer default 100);")?;
         s.execute("insert into t1 values(1, 'a', 1);")?;
         s.execute("insert into t1 values(2, 'b');")?;
         s.execute("insert into t1(c, a) values(200, 3);")?;
