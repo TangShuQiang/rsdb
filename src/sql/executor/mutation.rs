@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 use crate::{
     error::{Error, Result},
@@ -103,4 +103,53 @@ fn make_row(table: &Table, columns: &Vec<String>, value: &Row) -> Result<Row> {
         }
     }
     Ok(results)
+}
+
+pub struct Update<T: Transaction> {
+    table_name: String,
+    source: Box<dyn Executor<T>>,
+    columns: BTreeMap<String, Expression>,
+}
+
+impl<T: Transaction> Update<T> {
+    pub fn new(
+        table_name: String,
+        source: Box<dyn Executor<T>>,
+        columns: BTreeMap<String, Expression>,
+    ) -> Box<Self> {
+        Box::new(Self {
+            table_name,
+            source,
+            columns,
+        })
+    }
+}
+
+impl<T: Transaction> Executor<T> for Update<T> {
+    fn execute(self: Box<Self>, txn: &mut T) -> Result<ResultSet> {
+        let mut count = 0;
+        // 执行扫描操作，获取到扫描的结果
+        match self.source.execute(txn)? {
+            ResultSet::Scan { columns, rows } => {
+                let table = txn.must_get_table(self.table_name)?;
+                // 遍历所有需要更新的行
+                for row in rows {
+                    let mut new_row = row.clone();
+                    let pk = table.get_primary_key(&row)?;
+                    for (i, col) in columns.iter().enumerate() {
+                        if let Some(expr) = self.columns.get(col) {
+                            new_row[i] = Value::from_expression(expr.clone());
+                        }
+                    }
+                    // 执行更新操作
+                    // 如果有主键更新，删除原来的数据，新增一条新的数据
+                    // 如果没有主键更新，直接更新数据
+                    txn.update_row(&table, &pk, new_row)?;
+                    count += 1;
+                }
+            }
+            _ => return Err(Error::Internal("Update source must be a Scan".to_string())),
+        }
+        Ok(ResultSet::Update { count })
+    }
 }

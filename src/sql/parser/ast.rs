@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use crate::sql::types::DataType;
 
 // Abstract Syntax Tree 抽象语法树
@@ -14,6 +16,11 @@ pub enum Statement {
     },
     Select {
         table_name: String,
+    },
+    Update {
+        table_name: String,
+        columns: BTreeMap<String, Expression>,
+        where_clause: Option<(String, Expression)>,
     },
 }
 

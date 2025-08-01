@@ -1,6 +1,12 @@
 use crate::{
     error::{Error, Result},
-    sql::{executor::ResultSet, parser::Parser, plan::Plan, schema::Table, types::Row},
+    sql::{
+        executor::ResultSet,
+        parser::{Parser, ast::Expression},
+        plan::Plan,
+        schema::Table,
+        types::{Row, Value},
+    },
 };
 
 mod kv;
@@ -28,8 +34,14 @@ pub trait Transaction {
 
     // 创建行
     fn create_row(&self, table_name: String, row: Row) -> Result<()>;
+    // 更新行
+    fn update_row(&self, table: &Table, old_pk: &Value, row: Row) -> Result<()>;
     // 扫描表
-    fn scan_table(&self, table_name: String) -> Result<Vec<Row>>;
+    fn scan_table(
+        &self,
+        table_name: String,
+        filter: Option<(String, Expression)>,
+    ) -> Result<Vec<Row>>;
 
     // DDL 相关操作
     fn create_table(&self, table: Table) -> Result<()>;
@@ -50,7 +62,7 @@ pub struct Session<E: Engine> {
     engin: E,
 }
 
-impl<E: Engine> Session<E> {
+impl<E: Engine + 'static> Session<E> {
     // 执行客户端 SQL 语句
     pub fn execute(&self, sql: &str) -> Result<ResultSet> {
         match Parser::new(sql).parse()? {

@@ -4,6 +4,7 @@ use crate::{
     error::{Error, Result},
     sql::{
         engine::{Engine, Transaction},
+        parser::ast::Expression,
         schema::Table,
         types::{Row, Value},
     },
@@ -96,13 +97,39 @@ impl<E: StorageEngine> Transaction for KVTransaction<E> {
         Ok(())
     }
 
-    fn scan_table(&self, table_name: String) -> Result<Vec<Row>> {
-        let prefix = KeyPrefix::Row(table_name.clone());
-        let results = self.txn.scan_prefix(bincode::serialize(&prefix)?)?;
+    fn update_row(&self, table: &Table, old_pk: &Value, row: Row) -> Result<()> {
+        let new_pk = table.get_primary_key(&row)?;
+        // 更新了主键，则删除旧的数据
+        if *old_pk != new_pk {
+            let key = Key::Row(table.name.clone(), old_pk.clone()).encode()?;
+            self.txn.delete(key)?;
+        }
+        let key = Key::Row(table.name.clone(), new_pk).encode()?;
+        let value = bincode::serialize(&row)?;
+        self.txn.set(key, value)?;
+        Ok(())
+    }
+
+    fn scan_table(
+        &self,
+        table_name: String,
+        filter: Option<(String, Expression)>,
+    ) -> Result<Vec<Row>> {
+        let table = self.must_get_table(table_name.clone())?;
+        let prefix = KeyPrefix::Row(table_name.clone()).encode()?;
+        let results = self.txn.scan_prefix(prefix)?;
         let mut rows = Vec::new();
         for result in results {
-            let row = bincode::deserialize(&result.value)?;
-            rows.push(row);
+            // 过滤数据
+            let row: Row = bincode::deserialize(&result.value)?;
+            if let Some((col, expr)) = &filter {
+                let col_index = table.get_col_index(&col)?;
+                if Value::from_expression(expr.clone()) == row[col_index] {
+                    rows.push(row);
+                }
+            } else {
+                rows.push(row);
+            }
         }
         Ok(rows)
     }
@@ -170,10 +197,17 @@ mod tests {
         let kvengine = KVEngine::new(MemoryEngine::new());
         let s = kvengine.session()?;
 
-        s.execute("create table t1 (a int primary key, b text default 'vv', c integer default 100);")?;
+        s.execute(
+            "create table t1 (a int primary key, b text default 'vv', c integer default 100);",
+        )?;
         s.execute("insert into t1 values(1, 'a', 1);")?;
         s.execute("insert into t1 values(2, 'b');")?;
         s.execute("insert into t1(c, a) values(200, 3);")?;
+
+        let v = s.execute("update t1 set b = 'aa' where a = 1;")?;
+        println!("{:?}", v);
+        let v = s.execute("update t1 set a = 33 where a = 3;")?;
+        println!("{:?}", v);
 
         let result = s.execute("select * from t1;")?;
         println!("{:?}", result);
