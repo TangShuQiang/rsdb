@@ -5,7 +5,7 @@ use lexer::{Keyword, Lexer, Token};
 
 use super::types::DataType;
 use crate::{
-    error::{Error, Result},
+    error::{RSDBError, RSDBResult},
     sql::parser::ast::Expression,
 };
 
@@ -25,13 +25,13 @@ impl<'a> Parser<'a> {
     }
 
     // 解析，获取到AST
-    pub fn parse(&mut self) -> Result<ast::Statement> {
+    pub fn parse(&mut self) -> RSDBResult<ast::Statement> {
         let stmt = self.parse_statement()?;
         // 期望sql语句的最后是分号
         self.next_expect(Token::Semicolon)?;
         // 分号后面不能有其他 Token
         if let Some(token) = self.peek()? {
-            return Err(Error::Parse(format!(
+            return Err(RSDBError::Parse(format!(
                 "[Parse] Unexpected token after statement: {}",
                 token
             )));
@@ -39,7 +39,7 @@ impl<'a> Parser<'a> {
         Ok(stmt)
     }
 
-    fn parse_statement(&mut self) -> Result<ast::Statement> {
+    fn parse_statement(&mut self) -> RSDBResult<ast::Statement> {
         // 查看第一个 Token 类型
         match self.peek()? {
             Some(Token::Keyword(Keyword::Create)) => self.parse_ddl(),
@@ -47,24 +47,24 @@ impl<'a> Parser<'a> {
             Some(Token::Keyword(Keyword::Insert)) => self.parse_insert(),
             Some(Token::Keyword(Keyword::Update)) => self.parse_update(),
             Some(Token::Keyword(Keyword::Delete)) => self.parse_delete(),
-            Some(t) => Err(Error::Parse(format!("[Parse] Unexpected token {}", t))),
-            None => Err(Error::Parse(format!("[Parse] Unexpected end of input"))),
+            Some(t) => Err(RSDBError::Parse(format!("[Parse] Unexpected token {}", t))),
+            None => Err(RSDBError::Parse(format!("[Parse] Unexpected end of input"))),
         }
     }
 
     // 解析 DDL 语句
-    fn parse_ddl(&mut self) -> Result<ast::Statement> {
+    fn parse_ddl(&mut self) -> RSDBResult<ast::Statement> {
         match self.next()? {
             Token::Keyword(Keyword::Create) => match self.next()? {
                 Token::Keyword(Keyword::Table) => self.parse_ddl_create_table(),
-                token => Err(Error::Parse(format!("[Parse] Unexpected token {}", token))),
+                token => Err(RSDBError::Parse(format!("[Parse] Unexpected token {}", token))),
             },
-            token => Err(Error::Parse(format!("[Parse] Unexpected token {}", token))),
+            token => Err(RSDBError::Parse(format!("[Parse] Unexpected token {}", token))),
         }
     }
 
     // 解析 Select 语句
-    fn parse_select(&mut self) -> Result<ast::Statement> {
+    fn parse_select(&mut self) -> RSDBResult<ast::Statement> {
         self.next_expect(Token::Keyword(Keyword::Select))?;
         self.next_expect(Token::Asterisk)?;
         self.next_expect(Token::Keyword(Keyword::From))?;
@@ -75,7 +75,7 @@ impl<'a> Parser<'a> {
     }
 
     // 解析 Insert 语句
-    fn parse_insert(&mut self) -> Result<ast::Statement> {
+    fn parse_insert(&mut self) -> RSDBResult<ast::Statement> {
         self.next_expect(Token::Keyword(Keyword::Insert))?;
         self.next_expect(Token::Keyword(Keyword::Into))?;
 
@@ -91,7 +91,7 @@ impl<'a> Parser<'a> {
                     Token::CloseParen => break,
                     Token::Comma => continue,
                     token => {
-                        return Err(Error::Parse(format!("[Parse] Unexpected token {}", token)));
+                        return Err(RSDBError::Parse(format!("[Parse] Unexpected token {}", token)));
                     }
                 }
             }
@@ -112,7 +112,7 @@ impl<'a> Parser<'a> {
                     Token::CloseParen => break,
                     Token::Comma => continue,
                     token => {
-                        return Err(Error::Parse(format!("[Parse] Unexpected token {}", token)));
+                        return Err(RSDBError::Parse(format!("[Parse] Unexpected token {}", token)));
                     }
                 }
             }
@@ -129,7 +129,7 @@ impl<'a> Parser<'a> {
     }
 
     // 解析 Update 语句
-    fn parse_update(&mut self) -> Result<ast::Statement> {
+    fn parse_update(&mut self) -> RSDBResult<ast::Statement> {
         self.next_expect(Token::Keyword(Keyword::Update))?;
         // 表名
         let table_name = self.next_ident()?;
@@ -140,7 +140,7 @@ impl<'a> Parser<'a> {
             self.next_expect(Token::Equal)?;
             let value = self.parse_expression()?;
             if columns.contains_key(&col) {
-                return Err(Error::Parse(format!(
+                return Err(RSDBError::Parse(format!(
                     "[Parse] Duplicate column name {} in update statement",
                     col
                 )));
@@ -159,7 +159,7 @@ impl<'a> Parser<'a> {
     }
 
     // 解析 Delete 语句
-    fn parse_delete(&mut self) -> Result<ast::Statement> {
+    fn parse_delete(&mut self) -> RSDBResult<ast::Statement> {
         self.next_expect(Token::Keyword(Keyword::Delete))?;
         self.next_expect(Token::Keyword(Keyword::From))?;
         // 表名
@@ -170,7 +170,7 @@ impl<'a> Parser<'a> {
         })
     }
 
-    fn parse_where_clause(&mut self) -> Result<Option<(String, Expression)>> {
+    fn parse_where_clause(&mut self) -> RSDBResult<Option<(String, Expression)>> {
         if self.next_if_token(Token::Keyword(Keyword::Where)).is_none() {
             return Ok(None);
         }
@@ -181,7 +181,7 @@ impl<'a> Parser<'a> {
     }
 
     // 解析 Create Table 语句
-    fn parse_ddl_create_table(&mut self) -> Result<ast::Statement> {
+    fn parse_ddl_create_table(&mut self) -> RSDBResult<ast::Statement> {
         // 期待是 Table 名
         let table_name = self.next_ident()?;
         // 表名后面是左括号
@@ -203,7 +203,7 @@ impl<'a> Parser<'a> {
     }
 
     // 解析列信息
-    fn parse_ddl_column(&mut self) -> Result<Column> {
+    fn parse_ddl_column(&mut self) -> RSDBResult<Column> {
         let mut column = Column {
             name: self.next_ident()?,
             datatype: match self.next()? {
@@ -217,7 +217,7 @@ impl<'a> Parser<'a> {
                 Token::Keyword(Keyword::String)
                 | Token::Keyword(Keyword::Text)
                 | Token::Keyword(Keyword::Varchar) => DataType::String,
-                token => return Err(Error::Parse(format!("[Parse] Unexpected token {}", token))),
+                token => return Err(RSDBError::Parse(format!("[Parse] Unexpected token {}", token))),
             },
             nullable: None,
             default: None,
@@ -236,14 +236,14 @@ impl<'a> Parser<'a> {
                     self.next_expect(Token::Keyword(Keyword::Key))?;
                     column.primary_key = true;
                 }
-                k => return Err(Error::Parse(format!("[Parse] Unexpected keyword {}", k))),
+                k => return Err(RSDBError::Parse(format!("[Parse] Unexpected keyword {}", k))),
             }
         }
         Ok(column)
     }
 
     // 解析表达式
-    fn parse_expression(&mut self) -> Result<ast::Expression> {
+    fn parse_expression(&mut self) -> RSDBResult<ast::Expression> {
         Ok(match self.next()? {
             Token::Number(n) => {
                 if n.chars().all(|c| c.is_ascii_digit()) {
@@ -258,7 +258,7 @@ impl<'a> Parser<'a> {
             Token::Keyword(Keyword::True) => ast::Consts::Boolean(true).into(),
             Token::Keyword(Keyword::False) => ast::Consts::Boolean(false).into(),
             Token::Keyword(Keyword::Null) => ast::Consts::Null.into(),
-            t => return Err(Error::Parse(format!("[Parse] Unexpected token {}", t))),
+            t => return Err(RSDBError::Parse(format!("[Parse] Unexpected token {}", t))),
         })
     }
 
@@ -277,30 +277,30 @@ impl<'a> Parser<'a> {
         self.next().ok()
     }
 
-    fn peek(&mut self) -> Result<Option<Token>> {
+    fn peek(&mut self) -> RSDBResult<Option<Token>> {
         self.lexer.peek().cloned().transpose()
     }
 
-    fn next(&mut self) -> Result<Token> {
+    fn next(&mut self) -> RSDBResult<Token> {
         self.lexer
             .next()
-            .unwrap_or_else(|| Err(Error::Parse(format!("[Parse] Unexpected end of input"))))
+            .unwrap_or_else(|| Err(RSDBError::Parse(format!("[Parse] Unexpected end of input"))))
     }
 
-    fn next_ident(&mut self) -> Result<String> {
+    fn next_ident(&mut self) -> RSDBResult<String> {
         match self.next()? {
             Token::Ident(ident) => Ok(ident),
-            token => Err(Error::Parse(format!(
+            token => Err(RSDBError::Parse(format!(
                 "[Parse] Expected ident, got token {}",
                 token
             ))),
         }
     }
 
-    fn next_expect(&mut self, expect: Token) -> Result<()> {
+    fn next_expect(&mut self, expect: Token) -> RSDBResult<()> {
         let token = self.next()?;
         if token != expect {
-            return Err(Error::Parse(format!(
+            return Err(RSDBError::Parse(format!(
                 "[Parse] Expected token {}, got token {}",
                 expect, token
             )));
@@ -312,10 +312,10 @@ impl<'a> Parser<'a> {
 #[cfg(test)]
 mod tests {
     use super::Parser;
-    use crate::{error::Result, sql::parser::ast};
+    use crate::{error::RSDBResult, sql::parser::ast};
 
     #[test]
-    fn test_parser_create_table() -> Result<()> {
+    fn test_parser_create_table() -> RSDBResult<()> {
         let sql1 = "
             create table tab1 (
                 a int,
@@ -351,7 +351,7 @@ mod tests {
     }
 
     #[test]
-    fn test_parser_insert() -> Result<()> {
+    fn test_parser_insert() -> RSDBResult<()> {
         let sql1 = "
             insert into tab1 values (1, 2, 3, 'a', true);
         ";
@@ -398,7 +398,7 @@ mod tests {
     }
 
     #[test]
-    fn test_parser_select() -> Result<()> {
+    fn test_parser_select() -> RSDBResult<()> {
         let sql = "select * from tab1;";
         let stm = Parser::new(sql).parse()?;
         assert_eq!(
@@ -411,7 +411,7 @@ mod tests {
     }
 
     #[test]
-    fn test_parser_update() -> Result<()> {
+    fn test_parser_update() -> RSDBResult<()> {
         let sql = "update tbl set a = 1, b = 2.0 where c = 'a';";
         let stm = Parser::new(sql).parse()?;
         assert_eq!(

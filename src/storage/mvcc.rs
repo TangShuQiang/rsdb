@@ -7,7 +7,7 @@ use std::{
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    error::{Error, Result},
+    error::{RSDBError, RSDBResult},
     storage::{
         engine::Engine,
         keycode::{deserialize_key, serialize_key},
@@ -35,7 +35,7 @@ impl<E: Engine> Mvcc<E> {
         }
     }
 
-    pub fn begin(&self) -> Result<MvccTransaction<E>> {
+    pub fn begin(&self) -> RSDBResult<MvccTransaction<E>> {
         MvccTransaction::begin(self.engine.clone())
     }
 }
@@ -47,7 +47,7 @@ pub struct MvccTransaction<E: Engine> {
 
 impl<E: Engine> MvccTransaction<E> {
     // 开启事务
-    pub fn begin(eng: Arc<Mutex<E>>) -> Result<Self> {
+    pub fn begin(eng: Arc<Mutex<E>>) -> RSDBResult<Self> {
         // 获取存储引擎
         let mut engine = eng.lock()?;
         // 获取最新的版本号
@@ -73,7 +73,7 @@ impl<E: Engine> MvccTransaction<E> {
         })
     }
 
-    pub fn commit(&self) -> Result<()> {
+    pub fn commit(&self) -> RSDBResult<()> {
         let mut engine = self.engine.lock()?;
         let mut txnwrite_keys = Vec::new();
         // 找到当前事务的 TxnWrite 信息
@@ -90,7 +90,7 @@ impl<E: Engine> MvccTransaction<E> {
         engine.delete(MvccKey::TxnActive(self.state.version).encode()?)
     }
 
-    pub fn rollback(&self) -> Result<()> {
+    pub fn rollback(&self) -> RSDBResult<()> {
         let mut engine = self.engine.lock()?;
         let mut txnwrite_keys = Vec::new();
         let mut version_keys = Vec::new();
@@ -102,7 +102,7 @@ impl<E: Engine> MvccTransaction<E> {
                     version_keys.push(MvccKey::Version(raw_key, self.state.version).encode()?);
                 }
                 _ => {
-                    return Err(Error::Internal(format!(
+                    return Err(RSDBError::Internal(format!(
                         "unexpected key: {:?}",
                         String::from_utf8(key)
                     )));
@@ -121,15 +121,15 @@ impl<E: Engine> MvccTransaction<E> {
         engine.delete(MvccKey::TxnActive(self.state.version).encode()?)
     }
 
-    pub fn set(&self, key: Vec<u8>, value: Vec<u8>) -> Result<()> {
+    pub fn set(&self, key: Vec<u8>, value: Vec<u8>) -> RSDBResult<()> {
         self.write_inner(key, Some(value))
     }
 
-    pub fn delete(&self, key: Vec<u8>) -> Result<()> {
+    pub fn delete(&self, key: Vec<u8>) -> RSDBResult<()> {
         self.write_inner(key, None)
     }
 
-    pub fn get(&self, key: Vec<u8>) -> Result<Option<Vec<u8>>> {
+    pub fn get(&self, key: Vec<u8>) -> RSDBResult<Option<Vec<u8>>> {
         let mut engine = self.engine.lock()?;
         let from = MvccKey::Version(key.clone(), 0).encode()?;
         let to = MvccKey::Version(key.clone(), self.state.version).encode()?;
@@ -143,7 +143,7 @@ impl<E: Engine> MvccTransaction<E> {
                     }
                 }
                 _ => {
-                    return Err(Error::Internal(format!(
+                    return Err(RSDBError::Internal(format!(
                         "unexpected key: {:?}",
                         String::from_utf8(key)
                     )));
@@ -153,7 +153,7 @@ impl<E: Engine> MvccTransaction<E> {
         Ok(None)
     }
 
-    pub fn scan_prefix(&self, prefix: Vec<u8>) -> Result<Vec<ScanResult>> {
+    pub fn scan_prefix(&self, prefix: Vec<u8>) -> RSDBResult<Vec<ScanResult>> {
         let mut eng = self.engine.lock()?;
         let mut enc_prefix = MvccKeyPrefix::Version(prefix).encode()?;
         // 原始值           编码后
@@ -174,7 +174,7 @@ impl<E: Engine> MvccTransaction<E> {
                     }
                 }
                 _ => {
-                    return Err(Error::Internal(format!(
+                    return Err(RSDBError::Internal(format!(
                         "unexpected key: {:?}",
                         String::from_utf8(key)
                     )));
@@ -188,7 +188,7 @@ impl<E: Engine> MvccTransaction<E> {
     }
 
     // 更新 / 删除 数据
-    fn write_inner(&self, key: Vec<u8>, value: Option<Vec<u8>>) -> Result<()> {
+    fn write_inner(&self, key: Vec<u8>, value: Option<Vec<u8>>) -> RSDBResult<()> {
         // 获取存储引擎
         let mut engine = self.engine.lock()?;
         // 检测冲突
@@ -208,11 +208,11 @@ impl<E: Engine> MvccTransaction<E> {
                 MvccKey::Version(_, version) => {
                     // 检测这个 version 是否可见
                     if !self.state.is_visible(version) {
-                        return Err(Error::WriteConflict);
+                        return Err(RSDBError::WriteConflict);
                     }
                 }
                 _ => {
-                    return Err(Error::Internal(format!(
+                    return Err(RSDBError::Internal(format!(
                         "unexpected key: {:?}",
                         String::from_utf8(k)
                     )));
@@ -233,7 +233,7 @@ impl<E: Engine> MvccTransaction<E> {
     }
 
     // 扫描获取当前活跃事务列表
-    fn scan_active(engine: &mut MutexGuard<E>) -> Result<HashSet<Version>> {
+    fn scan_active(engine: &mut MutexGuard<E>) -> RSDBResult<HashSet<Version>> {
         let mut active_versions = HashSet::new();
         let mut iter = engine.scan_prefix(MvccKeyPrefix::TxnActive.encode()?);
         // 这个 key 是 MvccKey::TxnActive(version)
@@ -243,7 +243,7 @@ impl<E: Engine> MvccTransaction<E> {
                     active_versions.insert(version);
                 }
                 _ => {
-                    return Err(Error::Internal(format!(
+                    return Err(RSDBError::Internal(format!(
                         "unexpected key: {:?}",
                         String::from_utf8(key)
                     )));
@@ -286,11 +286,11 @@ pub enum MvccKey {
 }
 
 impl MvccKey {
-    pub fn encode(&self) -> Result<Vec<u8>> {
+    pub fn encode(&self) -> RSDBResult<Vec<u8>> {
         serialize_key(&self)
     }
 
-    pub fn decode(data: Vec<u8>) -> Result<Self> {
+    pub fn decode(data: Vec<u8>) -> RSDBResult<Self> {
         deserialize_key(&data)
     }
 }
@@ -304,7 +304,7 @@ pub enum MvccKeyPrefix {
 }
 
 impl MvccKeyPrefix {
-    pub fn encode(&self) -> Result<Vec<u8>> {
+    pub fn encode(&self) -> RSDBResult<Vec<u8>> {
         serialize_key(&self)
     }
 }
@@ -312,14 +312,14 @@ impl MvccKeyPrefix {
 #[cfg(test)]
 mod tests {
     use crate::{
-        error::Result,
+        error::RSDBResult,
         storage::{disk::DiskEngine, engine::Engine, memory::MemoryEngine},
     };
 
     use super::Mvcc;
 
     // 1. Get
-    fn get(eng: impl Engine) -> Result<()> {
+    fn get(eng: impl Engine) -> RSDBResult<()> {
         let mvcc = Mvcc::new(eng);
         let tx = mvcc.begin()?;
         tx.set(b"key1".to_vec(), b"val1".to_vec())?;
@@ -338,7 +338,7 @@ mod tests {
     }
 
     #[test]
-    fn test_get() -> Result<()> {
+    fn test_get() -> RSDBResult<()> {
         get(MemoryEngine::new())?;
 
         let p = tempfile::tempdir()?.keep().join("rsdb-log");
@@ -348,7 +348,7 @@ mod tests {
     }
 
     // 2. Get Isolation
-    fn get_isolation(eng: impl Engine) -> Result<()> {
+    fn get_isolation(eng: impl Engine) -> RSDBResult<()> {
         let mvcc = Mvcc::new(eng);
         let tx = mvcc.begin()?;
         tx.set(b"key1".to_vec(), b"val1".to_vec())?;
@@ -374,7 +374,7 @@ mod tests {
         Ok(())
     }
     #[test]
-    fn test_get_isolation() -> Result<()> {
+    fn test_get_isolation() -> RSDBResult<()> {
         get_isolation(MemoryEngine::new())?;
 
         let p = tempfile::tempdir()?.keep().join("rsdb-log");
@@ -384,7 +384,7 @@ mod tests {
     }
 
     // 3. scan prefix
-    fn scan_prefix(eng: impl Engine) -> Result<()> {
+    fn scan_prefix(eng: impl Engine) -> RSDBResult<()> {
         let mvcc = Mvcc::new(eng);
         let tx = mvcc.begin()?;
         tx.set(b"aabb".to_vec(), b"val1".to_vec())?;
@@ -447,7 +447,7 @@ mod tests {
     }
 
     #[test]
-    fn test_scan_prefix() -> Result<()> {
+    fn test_scan_prefix() -> RSDBResult<()> {
         scan_prefix(MemoryEngine::new())?;
 
         let p = tempfile::tempdir()?.keep().join("rsdb-log");
@@ -457,7 +457,7 @@ mod tests {
     }
 
     // 4. scan isolation
-    fn scan_isolation(eng: impl Engine) -> Result<()> {
+    fn scan_isolation(eng: impl Engine) -> RSDBResult<()> {
         let mvcc = Mvcc::new(eng);
         let tx = mvcc.begin()?;
         tx.set(b"aabb".to_vec(), b"val1".to_vec())?;
@@ -529,7 +529,7 @@ mod tests {
     }
 
     #[test]
-    fn test_scan_isolation() -> Result<()> {
+    fn test_scan_isolation() -> RSDBResult<()> {
         scan_isolation(MemoryEngine::new())?;
 
         let p = tempfile::tempdir()?.keep().join("rsdb-log");
@@ -539,7 +539,7 @@ mod tests {
     }
 
     // 5. set
-    fn set(eng: impl Engine) -> Result<()> {
+    fn set(eng: impl Engine) -> RSDBResult<()> {
         let mvcc = Mvcc::new(eng);
         let tx = mvcc.begin()?;
         tx.set(b"key1".to_vec(), b"val1".to_vec())?;
@@ -571,7 +571,7 @@ mod tests {
     }
 
     #[test]
-    fn test_set() -> Result<()> {
+    fn test_set() -> RSDBResult<()> {
         set(MemoryEngine::new())?;
 
         let p = tempfile::tempdir()?.keep().join("rsdb-log");
@@ -581,7 +581,7 @@ mod tests {
     }
 
     // 6. set conflict
-    fn set_conflict(eng: impl Engine) -> Result<()> {
+    fn set_conflict(eng: impl Engine) -> RSDBResult<()> {
         let mvcc = Mvcc::new(eng);
         let tx = mvcc.begin()?;
         tx.set(b"key1".to_vec(), b"val1".to_vec())?;
@@ -599,7 +599,7 @@ mod tests {
 
         assert_eq!(
             tx2.set(b"key1".to_vec(), b"val1-3".to_vec()),
-            Err(super::Error::WriteConflict)
+            Err(super::RSDBError::WriteConflict)
         );
 
         let tx3 = mvcc.begin()?;
@@ -608,7 +608,7 @@ mod tests {
 
         assert_eq!(
             tx1.set(b"key5".to_vec(), b"val6-1".to_vec()),
-            Err(super::Error::WriteConflict)
+            Err(super::RSDBError::WriteConflict)
         );
 
         tx1.commit()?;
@@ -616,7 +616,7 @@ mod tests {
     }
 
     #[test]
-    fn test_set_conflict() -> Result<()> {
+    fn test_set_conflict() -> RSDBResult<()> {
         set_conflict(MemoryEngine::new())?;
 
         let p = tempfile::tempdir()?.keep().join("rsdb-log");
@@ -626,7 +626,7 @@ mod tests {
     }
 
     // 7. delete
-    fn delete(eng: impl Engine) -> Result<()> {
+    fn delete(eng: impl Engine) -> RSDBResult<()> {
         let mvcc = Mvcc::new(eng);
         let tx = mvcc.begin()?;
         tx.set(b"key1".to_vec(), b"val1".to_vec())?;
@@ -658,7 +658,7 @@ mod tests {
     }
 
     #[test]
-    fn test_delete() -> Result<()> {
+    fn test_delete() -> RSDBResult<()> {
         delete(MemoryEngine::new())?;
 
         let p = tempfile::tempdir()?.keep().join("rsdb-log");
@@ -668,7 +668,7 @@ mod tests {
     }
 
     // 8. delete conflict
-    fn delete_conflict(eng: impl Engine) -> Result<()> {
+    fn delete_conflict(eng: impl Engine) -> RSDBResult<()> {
         let mvcc = Mvcc::new(eng);
         let tx = mvcc.begin()?;
         tx.set(b"key1".to_vec(), b"val1".to_vec())?;
@@ -682,18 +682,18 @@ mod tests {
 
         assert_eq!(
             tx2.delete(b"key1".to_vec()),
-            Err(super::Error::WriteConflict)
+            Err(super::RSDBError::WriteConflict)
         );
         assert_eq!(
             tx2.delete(b"key2".to_vec()),
-            Err(super::Error::WriteConflict)
+            Err(super::RSDBError::WriteConflict)
         );
 
         Ok(())
     }
 
     #[test]
-    fn test_delete_conflict() -> Result<()> {
+    fn test_delete_conflict() -> RSDBResult<()> {
         delete_conflict(MemoryEngine::new())?;
 
         let p = tempfile::tempdir()?.keep().join("rsdb-log");
@@ -703,7 +703,7 @@ mod tests {
     }
 
     // 9. dirty read
-    fn dirty_read(eng: impl Engine) -> Result<()> {
+    fn dirty_read(eng: impl Engine) -> RSDBResult<()> {
         let mvcc = Mvcc::new(eng);
         let tx = mvcc.begin()?;
         tx.set(b"key1".to_vec(), b"val1".to_vec())?;
@@ -721,7 +721,7 @@ mod tests {
     }
 
     #[test]
-    fn test_dirty_read() -> Result<()> {
+    fn test_dirty_read() -> RSDBResult<()> {
         dirty_read(MemoryEngine::new())?;
 
         let p = tempfile::tempdir()?.keep().join("rsdb-log");
@@ -731,7 +731,7 @@ mod tests {
     }
 
     // 10. unrepeatable read
-    fn unrepeatable_read(eng: impl Engine) -> Result<()> {
+    fn unrepeatable_read(eng: impl Engine) -> RSDBResult<()> {
         let mvcc = Mvcc::new(eng);
         let tx = mvcc.begin()?;
         tx.set(b"key1".to_vec(), b"val1".to_vec())?;
@@ -751,7 +751,7 @@ mod tests {
     }
 
     #[test]
-    fn test_unrepeatable_read() -> Result<()> {
+    fn test_unrepeatable_read() -> RSDBResult<()> {
         unrepeatable_read(MemoryEngine::new())?;
 
         let p = tempfile::tempdir()?.keep().join("rsdb-log");
@@ -761,7 +761,7 @@ mod tests {
     }
 
     // 11. phantom read
-    fn phantom_read(eng: impl Engine) -> Result<()> {
+    fn phantom_read(eng: impl Engine) -> RSDBResult<()> {
         let mvcc = Mvcc::new(eng);
         let tx = mvcc.begin()?;
         tx.set(b"key1".to_vec(), b"val1".to_vec())?;
@@ -817,7 +817,7 @@ mod tests {
     }
 
     #[test]
-    fn test_phantom_read() -> Result<()> {
+    fn test_phantom_read() -> RSDBResult<()> {
         phantom_read(MemoryEngine::new())?;
 
         let p = tempfile::tempdir()?.keep().join("rsdb-log");
@@ -827,7 +827,7 @@ mod tests {
     }
 
     // 12. rollback
-    fn rollback(eng: impl Engine) -> Result<()> {
+    fn rollback(eng: impl Engine) -> RSDBResult<()> {
         let mvcc = Mvcc::new(eng);
         let tx = mvcc.begin()?;
         tx.set(b"key1".to_vec(), b"val1".to_vec())?;
@@ -850,7 +850,7 @@ mod tests {
     }
 
     #[test]
-    fn test_rollback() -> Result<()> {
+    fn test_rollback() -> RSDBResult<()> {
         rollback(MemoryEngine::new())?;
 
         let p = tempfile::tempdir()?.keep().join("rsdb-log");

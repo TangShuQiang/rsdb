@@ -1,5 +1,5 @@
 use crate::{
-    error::Result,
+    error::RSDBResult,
     sql::{
         engine::Transaction,
         executor::{Executor, ResultSet},
@@ -18,7 +18,7 @@ impl CreateTable {
 }
 
 impl<T: Transaction> Executor<T> for CreateTable {
-    fn execute(self: Box<Self>, txn: &mut T) -> Result<ResultSet> {
+    fn execute(self: Box<Self>, txn: &mut T) -> RSDBResult<ResultSet> {
         let table_name = self.schema.name.clone();
         txn.create_table(self.schema)?;
         Ok(ResultSet::CreateTable { table_name })

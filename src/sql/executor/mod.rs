@@ -1,5 +1,5 @@
 use crate::{
-    error::Result,
+    error::RSDBResult,
     sql::{
         engine::Transaction,
         executor::{
@@ -18,7 +18,7 @@ mod schema;
 
 // 执行器定义
 pub trait Executor<T: Transaction> {
-    fn execute(self: Box<Self>, txn: &mut T) -> Result<ResultSet>;
+    fn execute(self: Box<Self>, txn: &mut T) -> RSDBResult<ResultSet>;
 }
 
 impl<T: Transaction + 'static> dyn Executor<T> {

@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use crate::{
-    error::Result,
+    error::RSDBResult,
     sql::{
         engine::Transaction,
         executor::{Executor, ResultSet},
@@ -57,7 +57,7 @@ impl Plan {
         Planner::new().build(stmt)
     }
 
-    pub fn execute<T: Transaction + 'static>(self, txn: &mut T) -> Result<ResultSet> {
+    pub fn execute<T: Transaction + 'static>(self, txn: &mut T) -> RSDBResult<ResultSet> {
         <dyn Executor<T>>::build(self.0).execute(txn)
     }
 }
@@ -65,7 +65,7 @@ impl Plan {
 #[cfg(test)]
 mod tests {
     use crate::{
-        error::Result,
+        error::RSDBResult,
         sql::{
             parser::{
                 Parser,
@@ -76,7 +76,7 @@ mod tests {
     };
 
     #[test]
-    fn test_plan_create_table() -> Result<()> {
+    fn test_plan_create_table() -> RSDBResult<()> {
         let sql1 = "
         create table tbl1 (
             a int default 100,
@@ -104,7 +104,7 @@ mod tests {
     }
 
     #[test]
-    fn test_plan_insert() -> Result<()> {
+    fn test_plan_insert() -> RSDBResult<()> {
         let sql1 = "insert into tbl1 values (1, 2, 3, 'a', true);";
         let stmt1 = Parser::new(sql1).parse()?;
         let p1 = Plan::build(stmt1);
@@ -150,7 +150,7 @@ mod tests {
     }
 
     #[test]
-    fn test_plan_select() -> Result<()> {
+    fn test_plan_select() -> RSDBResult<()> {
         let sql = "select * from tbl1;";
         let stmt = Parser::new(sql).parse()?;
         let p = Plan::build(stmt);

@@ -1,6 +1,6 @@
 use std::{fmt::Display, iter::Peekable, str::Chars};
 
-use crate::error::{Error, Result};
+use crate::error::{RSDBError, RSDBResult};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Token {
@@ -151,7 +151,7 @@ pub struct Lexer<'a> {
 
 // 自定义迭代器，返回 Token
 impl<'a> Iterator for Lexer<'a> {
-    type Item = Result<Token>;
+    type Item = RSDBResult<Token>;
 
     fn next(&mut self) -> Option<Self::Item> {
         match self.scan() {
@@ -159,7 +159,7 @@ impl<'a> Iterator for Lexer<'a> {
             Ok(None) => self
                 .iter
                 .peek()
-                .map(|c| Err(Error::Parse(format!("[Lexer] Unexpected character: {}", c)))),
+                .map(|c| Err(RSDBError::Parse(format!("[Lexer] Unexpected character: {}", c)))),
             Err(err) => Some(Err(err)),
         }
     }
@@ -201,7 +201,7 @@ impl<'a> Lexer<'a> {
     }
 
     // 扫描拿到下一个Token
-    fn scan(&mut self) -> Result<Option<Token>> {
+    fn scan(&mut self) -> RSDBResult<Option<Token>> {
         // 清除空白字符
         self.erase_whitespace();
         // 根据第一个字符判断
@@ -215,7 +215,7 @@ impl<'a> Lexer<'a> {
     }
 
     // 扫描字符串
-    fn scan_string(&mut self) -> Result<Option<Token>> {
+    fn scan_string(&mut self) -> RSDBResult<Option<Token>> {
         // 判断是否是单引号开头
         if self.next_if(|c| c == '\'').is_none() {
             return Ok(None);
@@ -226,7 +226,7 @@ impl<'a> Lexer<'a> {
                 Some('\'') => break,      // 遇到单引号结束
                 Some(c) => value.push(c), // 其他字符加入到字符串中
                 None => {
-                    return Err(Error::Parse(format!(
+                    return Err(RSDBError::Parse(format!(
                         "[Lexer] Unterminated string literal: {}",
                         value
                     )));
@@ -282,12 +282,12 @@ mod tests {
 
     use super::Lexer;
     use crate::{
-        error::Result,
+        error::RSDBResult,
         sql::parser::lexer::{Keyword, Token},
     };
 
     #[test]
-    fn test_lexer_create_table() -> Result<()> {
+    fn test_lexer_create_table() -> RSDBResult<()> {
         let tokens1 = Lexer::new(
             "CREATE table tbl
                 (
@@ -297,7 +297,7 @@ mod tests {
                 ",
         )
         .peekable()
-        .collect::<Result<Vec<_>>>()?;
+        .collect::<RSDBResult<Vec<_>>>()?;
 
         assert_eq!(
             tokens1,
@@ -336,7 +336,7 @@ mod tests {
                         ",
         )
         .peekable()
-        .collect::<Result<Vec<_>>>()?;
+        .collect::<RSDBResult<Vec<_>>>()?;
 
         assert!(tokens2.len() > 0);
 
@@ -344,10 +344,10 @@ mod tests {
     }
 
     #[test]
-    fn test_lexer_insert_into() -> Result<()> {
+    fn test_lexer_insert_into() -> RSDBResult<()> {
         let tokens1 = Lexer::new("insert into tbl values (1, 2, '3', true, false, 4.55);")
             .peekable()
-            .collect::<Result<Vec<_>>>()?;
+            .collect::<RSDBResult<Vec<_>>>()?;
 
         assert_eq!(
             tokens1,
@@ -375,7 +375,7 @@ mod tests {
 
         let tokens2 = Lexer::new("INSERT INTO       tbl (id, name, age) values (100, 'db', 10);")
             .peekable()
-            .collect::<Result<Vec<_>>>()?;
+            .collect::<RSDBResult<Vec<_>>>()?;
 
         assert_eq!(
             tokens2,
@@ -405,10 +405,10 @@ mod tests {
     }
 
     #[test]
-    fn test_lexer_select() -> Result<()> {
+    fn test_lexer_select() -> RSDBResult<()> {
         let tokens1 = Lexer::new("select * from tbl;")
             .peekable()
-            .collect::<Result<Vec<_>>>()?;
+            .collect::<RSDBResult<Vec<_>>>()?;
 
         assert_eq!(
             tokens1,

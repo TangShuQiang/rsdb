@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    error::{Error, Result},
+    error::{RSDBError, RSDBResult},
     sql::types::{DataType, Row, Value},
 };
 
@@ -13,10 +13,10 @@ pub struct Table {
 
 impl Table {
     // 验证表的有效性
-    pub fn validate(&self) -> Result<()> {
+    pub fn validate(&self) -> RSDBResult<()> {
         // 校验是否有列信息
         if self.columns.is_empty() {
-            return Err(crate::error::Error::Internal(format!(
+            return Err(crate::error::RSDBError::Internal(format!(
                 "table {} has no columns",
                 self.name
             )));
@@ -25,13 +25,13 @@ impl Table {
         match self.columns.iter().filter(|c| c.primary_key).count() {
             1 => {}
             0 => {
-                return Err(Error::Internal(format!(
+                return Err(RSDBError::Internal(format!(
                     "No primary key for table {}",
                     self.name
                 )));
             }
             _ => {
-                return Err(Error::Internal(format!(
+                return Err(RSDBError::Internal(format!(
                     "Multiple primary keys for table {}",
                     self.name
                 )));
@@ -40,7 +40,7 @@ impl Table {
         Ok(())
     }
 
-    pub fn get_primary_key(&self, row: &Row) -> Result<Value> {
+    pub fn get_primary_key(&self, row: &Row) -> RSDBResult<Value> {
         let pos = self
             .columns
             .iter()
@@ -49,11 +49,11 @@ impl Table {
         Ok(row[pos].clone())
     }
 
-    pub fn get_col_index(&self, col_name: &str) -> Result<usize> {
+    pub fn get_col_index(&self, col_name: &str) -> RSDBResult<usize> {
         self.columns
             .iter()
             .position(|c| c.name == col_name)
-            .ok_or(Error::Internal(format!(
+            .ok_or(RSDBError::Internal(format!(
                 "Column {} not found in table {}",
                 col_name, self.name
             )))

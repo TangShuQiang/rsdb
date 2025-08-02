@@ -1,6 +1,6 @@
 use std::ops::{Bound, RangeBounds};
 
-use crate::error::Result;
+use crate::error::RSDBResult;
 
 // 抽象存储引擎接口定义，接入不同的存储引擎，目前支持内存和简单的磁盘 KV 存储
 pub trait Engine {
@@ -9,13 +9,13 @@ pub trait Engine {
         Self: 'a;
 
     // 设置 key/value
-    fn set(&mut self, key: Vec<u8>, value: Vec<u8>) -> Result<()>;
+    fn set(&mut self, key: Vec<u8>, value: Vec<u8>) -> RSDBResult<()>;
 
     // 获取 key 对应的数据
-    fn get(&mut self, key: Vec<u8>) -> Result<Option<Vec<u8>>>;
+    fn get(&mut self, key: Vec<u8>) -> RSDBResult<Option<Vec<u8>>>;
 
     // 删除 key 对应的数据，如果 key 不存在则忽略
-    fn delete(&mut self, key: Vec<u8>) -> Result<()>;
+    fn delete(&mut self, key: Vec<u8>) -> RSDBResult<()>;
 
     // 扫描
     fn scan(&mut self, range: impl RangeBounds<Vec<u8>>) -> Self::EngineIterator<'_>;
@@ -32,19 +32,19 @@ pub trait Engine {
     }
 }
 
-pub trait EngineIterator: DoubleEndedIterator<Item = Result<(Vec<u8>, Vec<u8>)>> {}
+pub trait EngineIterator: DoubleEndedIterator<Item = RSDBResult<(Vec<u8>, Vec<u8>)>> {}
 
 #[cfg(test)]
 mod tests {
     use std::{ops::Bound, path::PathBuf};
 
     use crate::{
-        error::Result,
+        error::RSDBResult,
         storage::{disk::DiskEngine, engine::Engine, memory::MemoryEngine},
     };
 
     // 测试点读的情况
-    fn test_point_opt(mut eng: impl Engine) -> Result<()> {
+    fn test_point_opt(mut eng: impl Engine) -> RSDBResult<()> {
         // 测试获取一个不存在的 key
         assert_eq!(eng.get(b"not exist".to_vec())?, None);
 
@@ -71,7 +71,7 @@ mod tests {
     }
 
     // 测试扫描
-    fn test_scan(mut eng: impl Engine) -> Result<()> {
+    fn test_scan(mut eng: impl Engine) -> RSDBResult<()> {
         eng.set(b"nnaes".to_vec(), b"value1".to_vec())?;
         eng.set(b"amhue".to_vec(), b"value2".to_vec())?;
         eng.set(b"meeae".to_vec(), b"value3".to_vec())?;
@@ -106,7 +106,7 @@ mod tests {
     }
 
     // 测试前缀扫描
-    fn test_scan_prefix(mut eng: impl Engine) -> Result<()> {
+    fn test_scan_prefix(mut eng: impl Engine) -> RSDBResult<()> {
         eng.set(b"ccnaes".to_vec(), b"value1".to_vec())?;
         eng.set(b"camhue".to_vec(), b"value2".to_vec())?;
         eng.set(b"deeae".to_vec(), b"value3".to_vec())?;
@@ -127,7 +127,7 @@ mod tests {
     }
 
     #[test]
-    fn test_memory() -> Result<()> {
+    fn test_memory() -> RSDBResult<()> {
         test_point_opt(MemoryEngine::new())?;
         test_scan(MemoryEngine::new())?;
         test_scan_prefix(MemoryEngine::new())?;
@@ -135,7 +135,7 @@ mod tests {
     }
 
     #[test]
-    fn test_disk() -> Result<()> {
+    fn test_disk() -> RSDBResult<()> {
         test_point_opt(DiskEngine::new(PathBuf::from("/tmp/rsdb1/test.log"))?)?;
         std::fs::remove_dir_all(PathBuf::from("/tmp/rsdb1"))?;
 

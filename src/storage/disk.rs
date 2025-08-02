@@ -7,7 +7,7 @@ use std::{
 
 use fs4::FileExt;
 
-use crate::{error::Result, storage};
+use crate::{error::RSDBResult, storage};
 
 pub type KeyDir = BTreeMap<Vec<u8>, (u64, u32)>; // (offset, size)
 const LOG_HEADER_SIZE: u32 = 8;
@@ -19,20 +19,20 @@ pub struct DiskEngine {
 }
 
 impl DiskEngine {
-    pub fn new(file_path: PathBuf) -> Result<Self> {
+    pub fn new(file_path: PathBuf) -> RSDBResult<Self> {
         let log = Log::new(file_path)?;
         // 从 log 中加载 keydir
         let keydir = log.build_keydir()?;
         Ok(Self { keydir, log })
     }
 
-    pub fn new_compact(file_path: PathBuf) -> Result<Self> {
+    pub fn new_compact(file_path: PathBuf) -> RSDBResult<Self> {
         let mut eng = Self::new(file_path)?;
         eng.compact()?;
         Ok(eng)
     }
 
-    fn compact(&mut self) -> Result<()> {
+    fn compact(&mut self) -> RSDBResult<()> {
         // 新打开一个临时日志文件
         let mut new_path = self.log.file_path.clone();
         new_path.set_extension("compact");
@@ -61,7 +61,7 @@ impl DiskEngine {
 impl storage::engine::Engine for DiskEngine {
     type EngineIterator<'a> = DiskEngineIterator<'a>;
 
-    fn set(&mut self, key: Vec<u8>, value: Vec<u8>) -> Result<()> {
+    fn set(&mut self, key: Vec<u8>, value: Vec<u8>) -> RSDBResult<()> {
         // 先写日志
         let (offset, size) = self.log.write_entry(&key, Some(&value))?;
         // 更新内存索引
@@ -71,7 +71,7 @@ impl storage::engine::Engine for DiskEngine {
         Ok(())
     }
 
-    fn get(&mut self, key: Vec<u8>) -> Result<Option<Vec<u8>>> {
+    fn get(&mut self, key: Vec<u8>) -> RSDBResult<Option<Vec<u8>>> {
         match self.keydir.get(&key) {
             Some((offset, val_size)) => {
                 let val = self.log.read_value(*offset, *val_size)?;
@@ -81,7 +81,7 @@ impl storage::engine::Engine for DiskEngine {
         }
     }
 
-    fn delete(&mut self, key: Vec<u8>) -> Result<()> {
+    fn delete(&mut self, key: Vec<u8>) -> RSDBResult<()> {
         self.log.write_entry(&key, None)?;
         self.keydir.remove(&key);
         Ok(())
@@ -103,7 +103,7 @@ pub struct DiskEngineIterator<'a> {
 impl<'a> super::engine::EngineIterator for DiskEngineIterator<'a> {}
 
 impl<'a> Iterator for DiskEngineIterator<'a> {
-    type Item = Result<(Vec<u8>, Vec<u8>)>;
+    type Item = RSDBResult<(Vec<u8>, Vec<u8>)>;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.inner.next().map(|(key, (offset, val_size))| {
@@ -128,7 +128,7 @@ struct Log {
 }
 
 impl Log {
-    pub fn new(file_path: PathBuf) -> Result<Self> {
+    pub fn new(file_path: PathBuf) -> RSDBResult<Self> {
         // 如果目录不存在的话则创建
         if let Some(dir) = file_path.parent() {
             if !dir.exists() {
@@ -147,7 +147,7 @@ impl Log {
     }
 
     // 遍历数据文件，构建内存索引
-    fn build_keydir(&self) -> Result<KeyDir> {
+    fn build_keydir(&self) -> RSDBResult<KeyDir> {
         let mut keydir = KeyDir::new();
         let file_size = self.file.metadata()?.len();
         let mut buf_reader = BufReader::new(&self.file);
@@ -178,7 +178,7 @@ impl Log {
     // +-------------+-------------+----------------+----------------+
     // | key len(4)    val len(4)     key(varint)       val(varint)  |
     // +-------------+-------------+----------------+----------------+
-    fn write_entry(&mut self, key: &Vec<u8>, value: Option<&Vec<u8>>) -> Result<(u64, u32)> {
+    fn write_entry(&mut self, key: &Vec<u8>, value: Option<&Vec<u8>>) -> RSDBResult<(u64, u32)> {
         // 首先将文件偏移到末尾
         let offset = self.file.seek(SeekFrom::End(0))?;
         let key_size = key.len() as u32;
@@ -196,14 +196,14 @@ impl Log {
         Ok((offset, total_size))
     }
 
-    fn read_value(&mut self, offset: u64, val_size: u32) -> Result<Vec<u8>> {
+    fn read_value(&mut self, offset: u64, val_size: u32) -> RSDBResult<Vec<u8>> {
         self.file.seek(SeekFrom::Start(offset))?;
         let mut buf = vec![0; val_size as usize];
         self.file.read_exact(&mut buf)?;
         Ok(buf)
     }
 
-    fn read_entry(buf_reader: &mut BufReader<&File>, offset: u64) -> Result<(Vec<u8>, i32)> {
+    fn read_entry(buf_reader: &mut BufReader<&File>, offset: u64) -> RSDBResult<(Vec<u8>, i32)> {
         buf_reader.seek(SeekFrom::Start(offset))?;
         let mut len_buf = [0; 4];
         // 读取 key_size
@@ -224,12 +224,12 @@ mod tests {
     use std::path::PathBuf;
 
     use crate::{
-        error::Result,
+        error::RSDBResult,
         storage::{disk::DiskEngine, engine::Engine},
     };
 
     #[test]
-    fn test_disk_engine() -> Result<()> {
+    fn test_disk_engine() -> RSDBResult<()> {
         let mut eng = DiskEngine::new(PathBuf::from("/tmp/rsdb/test.log"))?;
         eng.set(b"key1".to_vec(), b"value1".to_vec())?;
         eng.set(b"key2".to_vec(), b"value2".to_vec())?;
@@ -237,7 +237,7 @@ mod tests {
         eng.delete(b"key2".to_vec())?;
         eng.set(b"key3".to_vec(), b"value3_updated".to_vec())?;
 
-        let result = eng.scan(..).collect::<Result<Vec<_>>>()?;
+        let result = eng.scan(..).collect::<RSDBResult<Vec<_>>>()?;
         assert_eq!(
             result,
             vec![
@@ -248,7 +248,7 @@ mod tests {
         drop(eng);
 
         let mut eng2: DiskEngine = DiskEngine::new_compact(PathBuf::from("/tmp/rsdb/test.log"))?;
-        let result2 = eng2.scan(..).collect::<Result<Vec<_>>>()?;
+        let result2 = eng2.scan(..).collect::<RSDBResult<Vec<_>>>()?;
         assert_eq!(
             result2,
             vec![

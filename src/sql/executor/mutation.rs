@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, HashMap};
 
 use crate::{
-    error::{Error, Result},
+    error::{RSDBError, RSDBResult},
     sql::{
         engine::Transaction,
         executor::{Executor, ResultSet},
@@ -32,7 +32,7 @@ impl Insert {
 }
 
 impl<T: Transaction> Executor<T> for Insert {
-    fn execute(self: Box<Self>, txn: &mut T) -> Result<ResultSet> {
+    fn execute(self: Box<Self>, txn: &mut T) -> RSDBResult<ResultSet> {
         let mut count = 0;
         let table = txn.must_get_table(self.table_name.clone())?;
         for exprs in self.values {
@@ -60,13 +60,13 @@ impl<T: Transaction> Executor<T> for Insert {
 // insert into tbl values(1, 2, 3);
 // a       b        c        d
 // 1       2        3    default 填充
-fn pad_row(table: &Table, row: &Row) -> Result<Row> {
+fn pad_row(table: &Table, row: &Row) -> RSDBResult<Row> {
     let mut results = row.clone();
     for column in table.columns.iter().skip(row.len()) {
         if let Some(default) = &column.default {
             results.push(default.clone());
         } else {
-            return Err(Error::Internal(format!(
+            return Err(RSDBError::Internal(format!(
                 "No default value for column {}",
                 column.name
             )));
@@ -78,10 +78,10 @@ fn pad_row(table: &Table, row: &Row) -> Result<Row> {
 // insert into tbl(d, c) values(1, 2);
 //     a         b         c          d
 // default    default      2          1
-fn make_row(table: &Table, columns: &Vec<String>, value: &Row) -> Result<Row> {
+fn make_row(table: &Table, columns: &Vec<String>, value: &Row) -> RSDBResult<Row> {
     // 判断列数是否和value数一致
     if columns.len() != value.len() {
-        return Err(Error::Internal(format!(
+        return Err(RSDBError::Internal(format!(
             "columns and values length mismatch"
         )));
     }
@@ -96,7 +96,7 @@ fn make_row(table: &Table, columns: &Vec<String>, value: &Row) -> Result<Row> {
         } else if let Some(value) = &col.default {
             results.push(value.clone());
         } else {
-            return Err(Error::Internal(format!(
+            return Err(RSDBError::Internal(format!(
                 "No value given for column {}",
                 col.name
             )));
@@ -127,7 +127,7 @@ impl<T: Transaction> Update<T> {
 }
 
 impl<T: Transaction> Executor<T> for Update<T> {
-    fn execute(self: Box<Self>, txn: &mut T) -> Result<ResultSet> {
+    fn execute(self: Box<Self>, txn: &mut T) -> RSDBResult<ResultSet> {
         let mut count = 0;
         // 执行扫描操作，获取到扫描的结果
         match self.source.execute(txn)? {
@@ -149,7 +149,7 @@ impl<T: Transaction> Executor<T> for Update<T> {
                     count += 1;
                 }
             }
-            _ => return Err(Error::Internal("Update source must be a Scan".to_string())),
+            _ => return Err(RSDBError::Internal("Update source must be a Scan".to_string())),
         }
         Ok(ResultSet::Update { count })
     }
@@ -167,7 +167,7 @@ impl<T: Transaction> Delete<T> {
     }
 }
 impl<T: Transaction> Executor<T> for Delete<T> {
-    fn execute(self: Box<Self>, txn: &mut T) -> Result<ResultSet> {
+    fn execute(self: Box<Self>, txn: &mut T) -> RSDBResult<ResultSet> {
         let mut count = 0;
         match self.source.execute(txn)? {
             ResultSet::Scan { columns, rows } => {
@@ -179,7 +179,7 @@ impl<T: Transaction> Executor<T> for Delete<T> {
                 }
                 Ok(ResultSet::Delete { count })
             }
-            _ => return Err(Error::Internal("Delete source must be a Scan".to_string())),
+            _ => return Err(RSDBError::Internal("Delete source must be a Scan".to_string())),
         }
     }
 }

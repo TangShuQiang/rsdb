@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    error::{Error, Result},
+    error::{RSDBError, RSDBResult},
     sql::{
         engine::{Engine, Transaction},
         parser::ast::Expression,
@@ -35,7 +35,7 @@ impl<E: StorageEngine> KVEngine<E> {
 impl<E: StorageEngine> Engine for KVEngine<E> {
     type Transaction = KVTransaction<E>;
 
-    fn begin(&self) -> Result<Self::Transaction> {
+    fn begin(&self) -> RSDBResult<Self::Transaction> {
         Ok(Self::Transaction::new(self.kv.begin()?))
     }
 }
@@ -52,27 +52,27 @@ impl<E: StorageEngine> KVTransaction<E> {
 }
 
 impl<E: StorageEngine> Transaction for KVTransaction<E> {
-    fn commit(&self) -> Result<()> {
+    fn commit(&self) -> RSDBResult<()> {
         self.txn.commit()
     }
 
-    fn rollback(&self) -> Result<()> {
+    fn rollback(&self) -> RSDBResult<()> {
         self.txn.rollback()
     }
 
-    fn create_row(&self, table: &Table, row: Row) -> Result<()> {
+    fn create_row(&self, table: &Table, row: Row) -> RSDBResult<()> {
         // 校验行的有效性
         for (i, col) in table.columns.iter().enumerate() {
             match row[i].datatype() {
                 None if col.nullable => continue,
                 None => {
-                    return Err(Error::Internal(format!(
+                    return Err(RSDBError::Internal(format!(
                         "column {} cannot be null",
                         col.name
                     )));
                 }
                 Some(dt) if dt != col.datatype => {
-                    return Err(Error::Internal(format!(
+                    return Err(RSDBError::Internal(format!(
                         "column {} type mismatch",
                         col.name
                     )));
@@ -85,7 +85,7 @@ impl<E: StorageEngine> Transaction for KVTransaction<E> {
         // 查看主键对应的数据是否已经存在了
         let id = Key::Row(table.name.clone(), pk.clone()).encode()?;
         if self.txn.get(id.clone())?.is_some() {
-            return Err(Error::Internal(format!(
+            return Err(RSDBError::Internal(format!(
                 "Duplicate data for primary key {:?} in table {}",
                 pk,
                 table.name.clone()
@@ -96,7 +96,7 @@ impl<E: StorageEngine> Transaction for KVTransaction<E> {
         self.txn.set(id, value)
     }
 
-    fn update_row(&self, table: &Table, old_pk: &Value, row: Row) -> Result<()> {
+    fn update_row(&self, table: &Table, old_pk: &Value, row: Row) -> RSDBResult<()> {
         let new_pk = table.get_primary_key(&row)?;
         // 更新了主键，则删除旧的数据
         if *old_pk != new_pk {
@@ -108,12 +108,12 @@ impl<E: StorageEngine> Transaction for KVTransaction<E> {
         self.txn.set(key, value)
     }
 
-    fn delete_row(&self, table: &Table, pk: &Value) -> Result<()> {
+    fn delete_row(&self, table: &Table, pk: &Value) -> RSDBResult<()> {
         let key = Key::Row(table.name.clone(), pk.clone()).encode()?;
         self.txn.delete(key)
     }
 
-    fn scan_table(&self, table: &Table, filter: Option<(String, Expression)>) -> Result<Vec<Row>> {
+    fn scan_table(&self, table: &Table, filter: Option<(String, Expression)>) -> RSDBResult<Vec<Row>> {
         let prefix = KeyPrefix::Row(table.name.clone()).encode()?;
         let results = self.txn.scan_prefix(prefix)?;
         let mut rows = Vec::new();
@@ -132,10 +132,10 @@ impl<E: StorageEngine> Transaction for KVTransaction<E> {
         Ok(rows)
     }
 
-    fn create_table(&self, table: Table) -> Result<()> {
+    fn create_table(&self, table: Table) -> RSDBResult<()> {
         // 判断表是否存在
         if self.get_table(table.name.clone())?.is_some() {
-            return Err(Error::Internal(format!(
+            return Err(RSDBError::Internal(format!(
                 "table {} already exists",
                 table.name
             )));
@@ -147,7 +147,7 @@ impl<E: StorageEngine> Transaction for KVTransaction<E> {
         self.txn.set(key, value)
     }
 
-    fn get_table(&self, table_name: String) -> Result<Option<Table>> {
+    fn get_table(&self, table_name: String) -> RSDBResult<Option<Table>> {
         let key = Key::Table(table_name).encode()?;
         Ok(self
             .txn
@@ -164,7 +164,7 @@ enum Key {
 }
 
 impl Key {
-    pub fn encode(&self) -> Result<Vec<u8>> {
+    pub fn encode(&self) -> RSDBResult<Vec<u8>> {
         serialize_key(self)
     }
 }
@@ -176,7 +176,7 @@ enum KeyPrefix {
 }
 
 impl KeyPrefix {
-    pub fn encode(&self) -> Result<Vec<u8>> {
+    pub fn encode(&self) -> RSDBResult<Vec<u8>> {
         serialize_key(self)
     }
 }
@@ -184,13 +184,13 @@ impl KeyPrefix {
 #[cfg(test)]
 mod tests {
     use crate::{
-        error::Result,
+        error::RSDBResult,
         sql::engine::{Engine, kv::KVEngine},
         storage::memory::MemoryEngine,
     };
 
     #[test]
-    fn test() -> Result<()> {
+    fn test() -> RSDBResult<()> {
         let kvengine = KVEngine::new(MemoryEngine::new());
         let s = kvengine.session()?;
 

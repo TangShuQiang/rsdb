@@ -1,5 +1,5 @@
 use crate::{
-    error::{Error, Result},
+    error::{RSDBError, RSDBResult},
     sql::{
         executor::ResultSet,
         parser::{Parser, ast::Expression},
@@ -15,9 +15,9 @@ mod kv;
 pub trait Engine: Clone {
     type Transaction: Transaction;
 
-    fn begin(&self) -> Result<Self::Transaction>;
+    fn begin(&self) -> RSDBResult<Self::Transaction>;
 
-    fn session(&self) -> Result<Session<Self>> {
+    fn session(&self) -> RSDBResult<Session<Self>> {
         Ok(Session {
             engin: self.clone(),
         })
@@ -28,27 +28,27 @@ pub trait Engine: Clone {
 // 底层可以接入普通的 KV 存储引擎，也可以接入分布式存储引擎
 pub trait Transaction {
     // 提交事务
-    fn commit(&self) -> Result<()>;
+    fn commit(&self) -> RSDBResult<()>;
     // 回滚事务
-    fn rollback(&self) -> Result<()>;
+    fn rollback(&self) -> RSDBResult<()>;
 
     // 创建行
-    fn create_row(&self, table: &Table, row: Row) -> Result<()>;
+    fn create_row(&self, table: &Table, row: Row) -> RSDBResult<()>;
     // 更新行
-    fn update_row(&self, table: &Table, old_pk: &Value, row: Row) -> Result<()>;
+    fn update_row(&self, table: &Table, old_pk: &Value, row: Row) -> RSDBResult<()>;
     // 删除行
-    fn delete_row(&self, table: &Table, pk: &Value) -> Result<()>;
+    fn delete_row(&self, table: &Table, pk: &Value) -> RSDBResult<()>;
     // 扫描表
-    fn scan_table(&self, table: &Table, filter: Option<(String, Expression)>) -> Result<Vec<Row>>;
+    fn scan_table(&self, table: &Table, filter: Option<(String, Expression)>) -> RSDBResult<Vec<Row>>;
 
     // DDL 相关操作
-    fn create_table(&self, table: Table) -> Result<()>;
+    fn create_table(&self, table: Table) -> RSDBResult<()>;
     // 获取表信息
-    fn get_table(&self, table_name: String) -> Result<Option<Table>>;
+    fn get_table(&self, table_name: String) -> RSDBResult<Option<Table>>;
     // 获取表信息，若不存在则报错
-    fn must_get_table(&self, table_name: String) -> Result<Table> {
+    fn must_get_table(&self, table_name: String) -> RSDBResult<Table> {
         self.get_table(table_name.clone())?
-            .ok_or(Error::Internal(format!(
+            .ok_or(RSDBError::Internal(format!(
                 "table {} does not exist",
                 table_name
             )))
@@ -62,7 +62,7 @@ pub struct Session<E: Engine> {
 
 impl<E: Engine + 'static> Session<E> {
     // 执行客户端 SQL 语句
-    pub fn execute(&self, sql: &str) -> Result<ResultSet> {
+    pub fn execute(&self, sql: &str) -> RSDBResult<ResultSet> {
         match Parser::new(sql).parse()? {
             stmt => {
                 let mut txn = self.engin.begin()?;

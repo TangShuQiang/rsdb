@@ -1,5 +1,5 @@
 use crate::{
-    error::Result,
+    error::RSDBResult,
     sql::{
         engine::Transaction,
         executor::{Executor, ResultSet}, parser::ast::Expression,
@@ -18,7 +18,7 @@ impl Scan {
 }
 
 impl<T: Transaction> Executor<T> for Scan {
-    fn execute(self: Box<Self>, txn: &mut T) -> Result<ResultSet> {
+    fn execute(self: Box<Self>, txn: &mut T) -> RSDBResult<ResultSet> {
         let table = txn.must_get_table(self.table_name.clone())?;
         let rows = txn.scan_table(&table, self.filter)?;
         Ok(ResultSet::Scan {

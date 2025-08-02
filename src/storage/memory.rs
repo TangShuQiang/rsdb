@@ -3,7 +3,7 @@ use std::{
     ops::RangeBounds,
 };
 
-use crate::{error::Result, storage};
+use crate::{error::RSDBResult, storage};
 
 // 内存存储引擎定义
 pub struct MemoryEngine {
@@ -21,17 +21,17 @@ impl MemoryEngine {
 impl storage::engine::Engine for MemoryEngine {
     type EngineIterator<'a> = MemoryEngineIterator<'a>;
 
-    fn set(&mut self, key: Vec<u8>, value: Vec<u8>) -> Result<()> {
+    fn set(&mut self, key: Vec<u8>, value: Vec<u8>) -> RSDBResult<()> {
         self.data.insert(key, value);
         Ok(())
     }
 
-    fn get(&mut self, key: Vec<u8>) -> Result<Option<Vec<u8>>> {
+    fn get(&mut self, key: Vec<u8>) -> RSDBResult<Option<Vec<u8>>> {
         let value = self.data.get(&key).cloned();
         Ok(value)
     }
 
-    fn delete(&mut self, key: Vec<u8>) -> Result<()> {
+    fn delete(&mut self, key: Vec<u8>) -> RSDBResult<()> {
         self.data.remove(&key);
         Ok(())
     }
@@ -51,7 +51,7 @@ pub struct MemoryEngineIterator<'a> {
 impl<'a> super::engine::EngineIterator for MemoryEngineIterator<'a> {}
 
 impl<'a> Iterator for MemoryEngineIterator<'a> {
-    type Item = Result<(Vec<u8>, Vec<u8>)>;
+    type Item = RSDBResult<(Vec<u8>, Vec<u8>)>;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.inner.next().map(|(k, v)| Ok((k.clone(), v.clone())))
