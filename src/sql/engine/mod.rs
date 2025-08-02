@@ -33,15 +33,13 @@ pub trait Transaction {
     fn rollback(&self) -> Result<()>;
 
     // 创建行
-    fn create_row(&self, table_name: String, row: Row) -> Result<()>;
+    fn create_row(&self, table: &Table, row: Row) -> Result<()>;
     // 更新行
     fn update_row(&self, table: &Table, old_pk: &Value, row: Row) -> Result<()>;
+    // 删除行
+    fn delete_row(&self, table: &Table, pk: &Value) -> Result<()>;
     // 扫描表
-    fn scan_table(
-        &self,
-        table_name: String,
-        filter: Option<(String, Expression)>,
-    ) -> Result<Vec<Row>>;
+    fn scan_table(&self, table: &Table, filter: Option<(String, Expression)>) -> Result<Vec<Row>>;
 
     // DDL 相关操作
     fn create_table(&self, table: Table) -> Result<()>;

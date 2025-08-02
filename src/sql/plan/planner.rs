@@ -66,6 +66,16 @@ impl Planner {
                 }),
                 columns: columns.into_iter().collect(),
             },
+            ast::Statement::Delete {
+                table_name,
+                where_clause,
+            } => Node::Delete {
+                table_name: table_name.clone(),
+                source: Box::new(Node::Scan {
+                    table_name,
+                    filter: where_clause,
+                }),
+            },
         }
     }
 }

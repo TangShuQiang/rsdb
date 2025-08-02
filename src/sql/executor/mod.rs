@@ -2,7 +2,11 @@ use crate::{
     error::Result,
     sql::{
         engine::Transaction,
-        executor::{mutation::{Insert, Update}, query::Scan, schema::CreateTable},
+        executor::{
+            mutation::{Delete, Insert, Update},
+            query::Scan,
+            schema::CreateTable,
+        },
         plan::Node,
         types::Row,
     },
@@ -32,6 +36,7 @@ impl<T: Transaction + 'static> dyn Executor<T> {
                 source,
                 columns,
             } => Update::new(table_name, Self::build(*source), columns),
+            Node::Delete { table_name, source } => Delete::new(table_name, Self::build(*source)),
         }
     }
 }
@@ -39,8 +44,20 @@ impl<T: Transaction + 'static> dyn Executor<T> {
 // 执行结果集
 #[derive(Debug)]
 pub enum ResultSet {
-    CreateTable { table_name: String },
-    Insert { count: usize },
-    Scan { columns: Vec<String>, rows: Vec<Row> },
-    Update { count: usize },
+    CreateTable {
+        table_name: String,
+    },
+    Insert {
+        count: usize,
+    },
+    Scan {
+        columns: Vec<String>,
+        rows: Vec<Row>,
+    },
+    Update {
+        count: usize,
+    },
+    Delete {
+        count: usize,
+    },
 }

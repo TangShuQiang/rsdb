@@ -60,8 +60,7 @@ impl<E: StorageEngine> Transaction for KVTransaction<E> {
         self.txn.rollback()
     }
 
-    fn create_row(&self, table_name: String, row: Row) -> Result<()> {
-        let table = self.must_get_table(table_name.clone())?;
+    fn create_row(&self, table: &Table, row: Row) -> Result<()> {
         // 校验行的有效性
         for (i, col) in table.columns.iter().enumerate() {
             match row[i].datatype() {
@@ -84,17 +83,17 @@ impl<E: StorageEngine> Transaction for KVTransaction<E> {
         // 找到表中的主键作为一行数据的唯一标识
         let pk = table.get_primary_key(&row)?;
         // 查看主键对应的数据是否已经存在了
-        let id = Key::Row(table_name.clone(), pk.clone()).encode()?;
+        let id = Key::Row(table.name.clone(), pk.clone()).encode()?;
         if self.txn.get(id.clone())?.is_some() {
             return Err(Error::Internal(format!(
                 "Duplicate data for primary key {:?} in table {}",
-                pk, table_name
+                pk,
+                table.name.clone()
             )));
         }
         // 存放数据
         let value = bincode::serialize(&row)?;
-        self.txn.set(id, value)?;
-        Ok(())
+        self.txn.set(id, value)
     }
 
     fn update_row(&self, table: &Table, old_pk: &Value, row: Row) -> Result<()> {
@@ -106,17 +105,16 @@ impl<E: StorageEngine> Transaction for KVTransaction<E> {
         }
         let key = Key::Row(table.name.clone(), new_pk).encode()?;
         let value = bincode::serialize(&row)?;
-        self.txn.set(key, value)?;
-        Ok(())
+        self.txn.set(key, value)
     }
 
-    fn scan_table(
-        &self,
-        table_name: String,
-        filter: Option<(String, Expression)>,
-    ) -> Result<Vec<Row>> {
-        let table = self.must_get_table(table_name.clone())?;
-        let prefix = KeyPrefix::Row(table_name.clone()).encode()?;
+    fn delete_row(&self, table: &Table, pk: &Value) -> Result<()> {
+        let key = Key::Row(table.name.clone(), pk.clone()).encode()?;
+        self.txn.delete(key)
+    }
+
+    fn scan_table(&self, table: &Table, filter: Option<(String, Expression)>) -> Result<Vec<Row>> {
+        let prefix = KeyPrefix::Row(table.name.clone()).encode()?;
         let results = self.txn.scan_prefix(prefix)?;
         let mut rows = Vec::new();
         for result in results {
@@ -146,8 +144,7 @@ impl<E: StorageEngine> Transaction for KVTransaction<E> {
         table.validate()?;
         let key = Key::Table(table.name.clone()).encode()?;
         let value = bincode::serialize(&table)?;
-        self.txn.set(key, value)?;
-        Ok(())
+        self.txn.set(key, value)
     }
 
     fn get_table(&self, table_name: String) -> Result<Option<Table>> {
@@ -209,8 +206,17 @@ mod tests {
         let v = s.execute("update t1 set a = 33 where a = 3;")?;
         println!("{:?}", v);
 
-        let result = s.execute("select * from t1;")?;
-        println!("{:?}", result);
+        let v = s.execute("delete from t1 where a = 2;")?;
+        println!("{:?}", v);
+
+        match s.execute("select * from t1;")? {
+            crate::sql::executor::ResultSet::Scan { columns, rows } => {
+                for row in rows {
+                    println!("{:?} ", row);
+                }
+            }
+            _ => panic!("Expected a scan result"),
+        }
 
         Ok(())
     }

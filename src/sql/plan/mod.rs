@@ -40,6 +40,12 @@ pub enum Node {
         source: Box<Node>,
         columns: BTreeMap<String, Expression>,
     },
+
+    // 删除节点
+    Delete {
+        table_name: String,
+        source: Box<Node>,
+    },
 }
 
 // 执行计划定义，底层是不同类型执行节点

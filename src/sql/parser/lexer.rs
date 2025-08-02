@@ -67,6 +67,7 @@ pub enum Keyword {
     Update,
     Set,
     Where,
+    Delete,
 }
 
 impl Keyword {
@@ -99,6 +100,7 @@ impl Keyword {
             "UPDATE" => Keyword::Update,
             "SET" => Keyword::Set,
             "WHERE" => Keyword::Where,
+            "DELETE" => Keyword::Delete,
             _ => return None,
         })
     }
@@ -131,6 +133,7 @@ impl Keyword {
             Keyword::Update => "UPDATE",
             Keyword::Set => "SET",
             Keyword::Where => "WHERE",
+            Keyword::Delete => "DELETE",
         }
     }
 }

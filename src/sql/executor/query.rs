@@ -20,7 +20,7 @@ impl Scan {
 impl<T: Transaction> Executor<T> for Scan {
     fn execute(self: Box<Self>, txn: &mut T) -> Result<ResultSet> {
         let table = txn.must_get_table(self.table_name.clone())?;
-        let rows = txn.scan_table(self.table_name.clone(), self.filter)?;
+        let rows = txn.scan_table(&table, self.filter)?;
         Ok(ResultSet::Scan {
             columns: table.columns.into_iter().map(|c| c.name).collect(),
             rows,

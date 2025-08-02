@@ -49,7 +49,7 @@ impl<T: Transaction> Executor<T> for Insert {
                 make_row(&table, &self.columns, &row)?
             };
             // 插入数据
-            txn.create_row(self.table_name.clone(), insert_row)?;
+            txn.create_row(&table, insert_row)?;
             count += 1;
         }
         Ok(ResultSet::Insert { count })
@@ -105,6 +105,7 @@ fn make_row(table: &Table, columns: &Vec<String>, value: &Row) -> Result<Row> {
     Ok(results)
 }
 
+// Update 执行器
 pub struct Update<T: Transaction> {
     table_name: String,
     source: Box<dyn Executor<T>>,
@@ -151,5 +152,34 @@ impl<T: Transaction> Executor<T> for Update<T> {
             _ => return Err(Error::Internal("Update source must be a Scan".to_string())),
         }
         Ok(ResultSet::Update { count })
+    }
+}
+
+// Delete 执行器
+pub struct Delete<T: Transaction> {
+    table_name: String,
+    source: Box<dyn Executor<T>>,
+}
+
+impl<T: Transaction> Delete<T> {
+    pub fn new(table_name: String, source: Box<dyn Executor<T>>) -> Box<Self> {
+        Box::new(Self { table_name, source })
+    }
+}
+impl<T: Transaction> Executor<T> for Delete<T> {
+    fn execute(self: Box<Self>, txn: &mut T) -> Result<ResultSet> {
+        let mut count = 0;
+        match self.source.execute(txn)? {
+            ResultSet::Scan { columns, rows } => {
+                let table = txn.must_get_table(self.table_name)?;
+                for row in rows {
+                    let pk = table.get_primary_key(&row)?;
+                    txn.delete_row(&table, &pk)?;
+                    count += 1;
+                }
+                Ok(ResultSet::Delete { count })
+            }
+            _ => return Err(Error::Internal("Delete source must be a Scan".to_string())),
+        }
     }
 }
