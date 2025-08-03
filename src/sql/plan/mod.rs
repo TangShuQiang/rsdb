@@ -52,6 +52,18 @@ pub enum Node {
         source: Box<Node>,
         order_by: Vec<(String, OrderDirection)>,
     },
+
+    // Limit 节点
+    Limit {
+        source: Box<Node>,
+        limit: usize,
+    },
+
+    // Offset 节点
+    Offset {
+        source: Box<Node>,
+        offset: usize,
+    },
 }
 
 // 执行计划定义，底层是不同类型执行节点
@@ -59,8 +71,8 @@ pub enum Node {
 pub struct Plan(pub Node);
 
 impl Plan {
-    pub fn build(stmt: ast::Statement) -> Self {
-        Planner::new().build(stmt)
+    pub fn build(stmt: ast::Statement) -> RSDBResult<Self> {
+        Ok(Planner::new().build(stmt)?)
     }
 
     pub fn execute<T: Transaction + 'static>(self, txn: &mut T) -> RSDBResult<ResultSet> {
@@ -113,7 +125,7 @@ mod tests {
     fn test_plan_insert() -> RSDBResult<()> {
         let sql1 = "insert into tbl1 values (1, 2, 3, 'a', true);";
         let stmt1 = Parser::new(sql1).parse()?;
-        let p1 = Plan::build(stmt1);
+        let p1 = Plan::build(stmt1)?;
         assert_eq!(
             p1,
             Plan(Node::Insert {
@@ -131,7 +143,7 @@ mod tests {
 
         let sql2 = "insert into tbl2 (c1, c2, c3) values (3, 'a', true),(4, 'b', false);";
         let stmt2 = Parser::new(sql2).parse()?;
-        let p2 = Plan::build(stmt2);
+        let p2 = Plan::build(stmt2)?;
         assert_eq!(
             p2,
             Plan(Node::Insert {
@@ -159,7 +171,7 @@ mod tests {
     fn test_plan_select() -> RSDBResult<()> {
         let sql = "select * from tbl1;";
         let stmt = Parser::new(sql).parse()?;
-        let p = Plan::build(stmt);
+        let p = Plan::build(stmt)?;
         assert_eq!(
             p,
             Plan(Node::Scan {

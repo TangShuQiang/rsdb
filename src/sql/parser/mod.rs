@@ -80,6 +80,23 @@ impl<'a> Parser<'a> {
         Ok(ast::Statement::Select {
             table_name,
             order_by: self.parse_order_clause()?,
+            limit: {
+                if self.next_if_token(Token::Keyword(Keyword::Limit)).is_some() {
+                    Some(self.parse_expression()?)
+                } else {
+                    None
+                }
+            },
+            offset: {
+                if self
+                    .next_if_token(Token::Keyword(Keyword::Offset))
+                    .is_some()
+                {
+                    Some(self.parse_expression()?)
+                } else {
+                    None
+                }
+            },
         })
     }
 
@@ -363,7 +380,10 @@ impl<'a> Parser<'a> {
 #[cfg(test)]
 mod tests {
     use super::Parser;
-    use crate::{error::RSDBResult, sql::parser::ast};
+    use crate::{
+        error::RSDBResult,
+        sql::parser::ast::{self, Consts, Expression},
+    };
 
     #[test]
     fn test_parser_create_table() -> RSDBResult<()> {
@@ -457,10 +477,12 @@ mod tests {
             ast::Statement::Select {
                 table_name: "tab1".to_string(),
                 order_by: vec![],
+                limit: None,
+                offset: None,
             }
         );
 
-        let sql = "select * from tbl1 order by a, b asc, c desc;";
+        let sql = "select * from tbl1 order by a, b asc, c desc limit 1 offset 2;";
         let stm = Parser::new(sql).parse()?;
         assert_eq!(
             stm,
@@ -471,6 +493,8 @@ mod tests {
                     ("b".to_string(), ast::OrderDirection::Asc),
                     ("c".to_string(), ast::OrderDirection::Desc),
                 ],
+                limit: Some(Expression::Consts(Consts::Integer(1))),
+                offset: Some(Expression::Consts(Consts::Integer(2))),
             }
         );
         Ok(())

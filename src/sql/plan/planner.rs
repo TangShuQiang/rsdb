@@ -1,8 +1,11 @@
-use crate::sql::{
-    parser::ast,
-    plan::{Node, Plan},
-    schema::{self, Table},
-    types::Value,
+use crate::{
+    error::{RSDBError, RSDBResult},
+    sql::{
+        parser::ast,
+        plan::{Node, Plan},
+        schema::{self, Table},
+        types::Value,
+    },
 };
 
 pub struct Planner;
@@ -12,12 +15,12 @@ impl Planner {
         Self {}
     }
 
-    pub fn build(&mut self, stmt: ast::Statement) -> Plan {
-        Plan(self.build_statement(stmt))
+    pub fn build(&mut self, stmt: ast::Statement) -> RSDBResult<Plan> {
+        Ok(Plan(self.build_statement(stmt)?))
     }
 
-    fn build_statement(&self, stmt: ast::Statement) -> Node {
-        match stmt {
+    fn build_statement(&self, stmt: ast::Statement) -> RSDBResult<Node> {
+        let node = match stmt {
             ast::Statement::CreateTable { name, columns } => Node::CreateTable {
                 schema: Table {
                     name,
@@ -53,6 +56,8 @@ impl Planner {
             ast::Statement::Select {
                 table_name,
                 order_by,
+                limit,
+                offset,
             } => {
                 let mut node = Node::Scan {
                     table_name,
@@ -62,7 +67,33 @@ impl Planner {
                     node = Node::Order {
                         source: Box::new(node),
                         order_by,
-                    };
+                    }
+                }
+                if let Some(expr) = offset {
+                    node = Node::Offset {
+                        source: Box::new(node),
+                        offset: match Value::from_expression(expr) {
+                            Value::Integer(i) => i as usize,
+                            _ => {
+                                return Err(RSDBError::Internal(
+                                    "invalid offset expression".to_string(),
+                                ));
+                            }
+                        },
+                    }
+                }
+                if let Some(expr) = limit {
+                    node = Node::Limit {
+                        source: Box::new(node),
+                        limit: match Value::from_expression(expr) {
+                            Value::Integer(i) => i as usize,
+                            _ => {
+                                return Err(RSDBError::Internal(
+                                    "invalid limit expression".to_string(),
+                                ));
+                            }
+                        },
+                    }
                 }
                 node
             }
@@ -88,6 +119,7 @@ impl Planner {
                     filter: where_clause,
                 }),
             },
-        }
+        };
+        Ok(node)
     }
 }

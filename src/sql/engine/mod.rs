@@ -67,7 +67,7 @@ impl<E: Engine + 'static> Session<E> {
             stmt => {
                 let mut txn = self.engin.begin()?;
                 // 构建 plan，执行 SQL 语句
-                match Plan::build(stmt).execute(&mut txn) {
+                match Plan::build(stmt)?.execute(&mut txn) {
                     Ok(result) => {
                         txn.commit()?;
                         Ok(result)
