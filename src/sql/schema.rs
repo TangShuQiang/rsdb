@@ -1,3 +1,5 @@
+use std::default;
+
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -35,6 +37,30 @@ impl Table {
                     "Multiple primary keys for table {}",
                     self.name
                 )));
+            }
+        }
+        // 校验列信息
+        for col in &self.columns {
+            // 主键不能为空
+            if col.primary_key && col.nullable {
+                return Err(RSDBError::Internal(format!(
+                    "Primary key column {} in table {} cannot be nullable",
+                    col.name, self.name
+                )));
+            }
+            // 校验默认值是否与数据类型匹配
+            if let Some(default_val) = &col.default {
+                match default_val.datatype() {
+                    Some(dt) => {
+                        if dt != col.datatype {
+                            return Err(RSDBError::Internal(format!(
+                                "Default value for column {} in table {} does not match its datatype",
+                                col.name, self.name
+                            )));
+                        }
+                    }
+                    None => {}
+                }
             }
         }
         Ok(())
