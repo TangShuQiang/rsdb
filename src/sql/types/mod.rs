@@ -1,4 +1,4 @@
-use std::fmt::Display;
+use std::{cmp::Ordering, fmt::Display};
 
 use serde::{Deserialize, Serialize};
 
@@ -52,6 +52,23 @@ impl Display for Value {
             Self::Integer(i) => write!(f, "{}", i),
             Self::Float(fl) => write!(f, "{}", fl),
             Self::String(s) => write!(f, "'{}'", s),
+        }
+    }
+}
+
+impl PartialOrd for Value {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        match (self, other) {
+            (Self::Null, Self::Null) => Some(Ordering::Equal),
+            (Self::Null, _) => Some(Ordering::Less),
+            (_, Self::Null) => Some(Ordering::Greater),
+            (Self::Boolean(a), Self::Boolean(b)) => a.partial_cmp(b),
+            (Self::Integer(a), Self::Integer(b)) => a.partial_cmp(b),
+            (Self::Integer(a), Self::Float(b)) => (*a as f64).partial_cmp(b),
+            (Self::Float(a), Self::Integer(b)) => a.partial_cmp(&(*b as f64)),
+            (Self::Float(a), Self::Float(b)) => a.partial_cmp(b),
+            (Self::String(a), Self::String(b)) => a.partial_cmp(b),
+            _ => None, // 不同类型之间不支持比较
         }
     }
 }

@@ -4,7 +4,7 @@ use crate::{
         engine::Transaction,
         executor::{
             mutation::{Delete, Insert, Update},
-            query::Scan,
+            query::{Order, Scan},
             schema::CreateTable,
         },
         plan::Node,
@@ -37,6 +37,7 @@ impl<T: Transaction + 'static> dyn Executor<T> {
                 columns,
             } => Update::new(table_name, Self::build(*source), columns),
             Node::Delete { table_name, source } => Delete::new(table_name, Self::build(*source)),
+            Node::Order { source, order_by } => Order::new(Self::build(*source), order_by),
         }
     }
 }

@@ -6,7 +6,7 @@ use lexer::{Keyword, Lexer, Token};
 use super::types::DataType;
 use crate::{
     error::{RSDBError, RSDBResult},
-    sql::parser::ast::Expression,
+    sql::parser::ast::{Expression, OrderDirection},
 };
 
 pub mod ast;
@@ -57,9 +57,15 @@ impl<'a> Parser<'a> {
         match self.next()? {
             Token::Keyword(Keyword::Create) => match self.next()? {
                 Token::Keyword(Keyword::Table) => self.parse_ddl_create_table(),
-                token => Err(RSDBError::Parse(format!("[Parse] Unexpected token {}", token))),
+                token => Err(RSDBError::Parse(format!(
+                    "[Parse] Unexpected token {}",
+                    token
+                ))),
             },
-            token => Err(RSDBError::Parse(format!("[Parse] Unexpected token {}", token))),
+            token => Err(RSDBError::Parse(format!(
+                "[Parse] Unexpected token {}",
+                token
+            ))),
         }
     }
 
@@ -71,7 +77,10 @@ impl<'a> Parser<'a> {
 
         // 表名
         let table_name = self.next_ident()?;
-        Ok(ast::Statement::Select { table_name })
+        Ok(ast::Statement::Select {
+            table_name,
+            order_by: self.parse_order_clause()?,
+        })
     }
 
     // 解析 Insert 语句
@@ -91,7 +100,10 @@ impl<'a> Parser<'a> {
                     Token::CloseParen => break,
                     Token::Comma => continue,
                     token => {
-                        return Err(RSDBError::Parse(format!("[Parse] Unexpected token {}", token)));
+                        return Err(RSDBError::Parse(format!(
+                            "[Parse] Unexpected token {}",
+                            token
+                        )));
                     }
                 }
             }
@@ -112,7 +124,10 @@ impl<'a> Parser<'a> {
                     Token::CloseParen => break,
                     Token::Comma => continue,
                     token => {
-                        return Err(RSDBError::Parse(format!("[Parse] Unexpected token {}", token)));
+                        return Err(RSDBError::Parse(format!(
+                            "[Parse] Unexpected token {}",
+                            token
+                        )));
                     }
                 }
             }
@@ -180,6 +195,32 @@ impl<'a> Parser<'a> {
         Ok(Some((col, value)))
     }
 
+    fn parse_order_clause(&mut self) -> RSDBResult<Vec<(String, OrderDirection)>> {
+        let mut orders = Vec::new();
+        if self.next_if_token(Token::Keyword(Keyword::Order)).is_none() {
+            return Ok(orders);
+        }
+        self.next_expect(Token::Keyword(Keyword::By))?;
+        loop {
+            let col = self.next_ident()?;
+            let ord = match self.next_if(|t| {
+                matches!(
+                    t,
+                    Token::Keyword(Keyword::Asc) | Token::Keyword(Keyword::Desc)
+                )
+            }) {
+                Some(Token::Keyword(Keyword::Asc)) => OrderDirection::Asc,
+                Some(Token::Keyword(Keyword::Desc)) => OrderDirection::Desc,
+                _ => OrderDirection::Asc,
+            };
+            orders.push((col, ord));
+            if self.next_if_token(Token::Comma).is_none() {
+                break;
+            }
+        }
+        Ok(orders)
+    }
+
     // 解析 Create Table 语句
     fn parse_ddl_create_table(&mut self) -> RSDBResult<ast::Statement> {
         // 期待是 Table 名
@@ -217,7 +258,12 @@ impl<'a> Parser<'a> {
                 Token::Keyword(Keyword::String)
                 | Token::Keyword(Keyword::Text)
                 | Token::Keyword(Keyword::Varchar) => DataType::String,
-                token => return Err(RSDBError::Parse(format!("[Parse] Unexpected token {}", token))),
+                token => {
+                    return Err(RSDBError::Parse(format!(
+                        "[Parse] Unexpected token {}",
+                        token
+                    )));
+                }
             },
             nullable: None,
             default: None,
@@ -236,7 +282,12 @@ impl<'a> Parser<'a> {
                     self.next_expect(Token::Keyword(Keyword::Key))?;
                     column.primary_key = true;
                 }
-                k => return Err(RSDBError::Parse(format!("[Parse] Unexpected keyword {}", k))),
+                k => {
+                    return Err(RSDBError::Parse(format!(
+                        "[Parse] Unexpected keyword {}",
+                        k
+                    )));
+                }
             }
         }
         Ok(column)
@@ -271,7 +322,7 @@ impl<'a> Parser<'a> {
         self.next_if(|t| matches!(t, Token::Keyword(_)))
     }
 
-    // 如果满足条件，则跳转并返回该 Token
+    // 如果满足条件，则跳过并返回该 Token
     fn next_if<F: Fn(&Token) -> bool>(&mut self, predicate: F) -> Option<Token> {
         self.peek().unwrap_or(None).filter(|t| predicate(t))?;
         self.next().ok()
@@ -404,7 +455,22 @@ mod tests {
         assert_eq!(
             stm,
             ast::Statement::Select {
-                table_name: "tab1".to_string()
+                table_name: "tab1".to_string(),
+                order_by: vec![],
+            }
+        );
+
+        let sql = "select * from tbl1 order by a, b asc, c desc;";
+        let stm = Parser::new(sql).parse()?;
+        assert_eq!(
+            stm,
+            ast::Statement::Select {
+                table_name: "tbl1".to_string(),
+                order_by: vec![
+                    ("a".to_string(), ast::OrderDirection::Asc),
+                    ("b".to_string(), ast::OrderDirection::Asc),
+                    ("c".to_string(), ast::OrderDirection::Desc),
+                ],
             }
         );
         Ok(())
