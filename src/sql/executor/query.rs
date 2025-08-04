@@ -142,3 +142,65 @@ impl<T: Transaction> Executor<T> for Offset<T> {
         }
     }
 }
+
+pub struct Projection<T: Transaction> {
+    source: Box<dyn Executor<T>>,
+    exprs: Vec<(Expression, Option<String>)>,
+}
+
+impl<T: Transaction> Projection<T> {
+    pub fn new(
+        source: Box<dyn Executor<T>>,
+        exprs: Vec<(Expression, Option<String>)>,
+    ) -> Box<Self> {
+        Box::new(Self { source, exprs })
+    }
+}
+
+impl<T: Transaction> Executor<T> for Projection<T> {
+    fn execute(self: Box<Self>, txn: &mut T) -> RSDBResult<ResultSet> {
+        match self.source.execute(txn)? {
+            ResultSet::Scan { columns, rows } => {
+                // 找到需要输出哪些列
+                let mut selected = Vec::new();
+                let mut new_columns = Vec::new();
+                for (expr, alias) in self.exprs {
+                    if let Expression::Field(col_name) = expr {
+                        let pos = match columns.iter().position(|c| *c == col_name) {
+                            Some(pos) => pos,
+                            None => {
+                                return Err(RSDBError::Internal(format!(
+                                    "column {} not found in table",
+                                    col_name
+                                )));
+                            }
+                        };
+                        selected.push(pos);
+                        if let Some(a) = alias {
+                            new_columns.push(a);
+                        } else {
+                            new_columns.push(col_name);
+                        }
+                    }
+                }
+                let mut new_rows = Vec::new();
+                for row in rows.into_iter() {
+                    let mut new_row = Vec::new();
+                    for i in selected.iter() {
+                        new_row.push(row[*i].clone());
+                    }
+                    new_rows.push(new_row);
+                }
+                Ok(ResultSet::Scan {
+                    columns: new_columns,
+                    rows: new_rows,
+                })
+            }
+            _ => {
+                return Err(RSDBError::Internal(
+                    "Project source must be a Scan".to_string(),
+                ));
+            }
+        }
+    }
+}

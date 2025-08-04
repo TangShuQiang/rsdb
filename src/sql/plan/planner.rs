@@ -54,6 +54,7 @@ impl Planner {
                 values,
             },
             ast::Statement::Select {
+                select,
                 table_name,
                 order_by,
                 limit,
@@ -69,6 +70,7 @@ impl Planner {
                         order_by,
                     }
                 }
+                // offset
                 if let Some(expr) = offset {
                     node = Node::Offset {
                         source: Box::new(node),
@@ -82,6 +84,7 @@ impl Planner {
                         },
                     }
                 }
+                // limit
                 if let Some(expr) = limit {
                     node = Node::Limit {
                         source: Box::new(node),
@@ -93,6 +96,13 @@ impl Planner {
                                 ));
                             }
                         },
+                    }
+                }
+                // projection
+                if !select.is_empty() {
+                    node = Node::Projection {
+                        source: Box::new(node),
+                        exprs: select,
                     }
                 }
                 node

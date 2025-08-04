@@ -64,6 +64,12 @@ pub enum Node {
         source: Box<Node>,
         offset: usize,
     },
+
+    // 投影节点
+    Projection {
+        source: Box<Node>,
+        exprs: Vec<(Expression, Option<String>)>,
+    },
 }
 
 // 执行计划定义，底层是不同类型执行节点

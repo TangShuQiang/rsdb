@@ -71,13 +71,14 @@ impl<'a> Parser<'a> {
 
     // 解析 Select 语句
     fn parse_select(&mut self) -> RSDBResult<ast::Statement> {
-        self.next_expect(Token::Keyword(Keyword::Select))?;
-        self.next_expect(Token::Asterisk)?;
+        // 解析 Select 的列信息
+        let select = self.parse_select_clause()?;
         self.next_expect(Token::Keyword(Keyword::From))?;
 
         // 表名
         let table_name = self.next_ident()?;
         Ok(ast::Statement::Select {
+            select,
             table_name,
             order_by: self.parse_order_clause()?,
             limit: {
@@ -202,6 +203,27 @@ impl<'a> Parser<'a> {
         })
     }
 
+    fn parse_select_clause(&mut self) -> RSDBResult<Vec<(Expression, Option<String>)>> {
+        self.next_expect(Token::Keyword(Keyword::Select))?;
+        let mut select = Vec::new();
+        if self.next_if_token(Token::Asterisk).is_some() {
+            return Ok(select);
+        }
+        loop {
+            let expr = self.parse_expression()?;
+            // 查看是否有别名
+            let alias = match self.next_if_token(Token::Keyword(Keyword::As)) {
+                Some(_) => Some(self.next_ident()?),
+                None => None,
+            };
+            select.push((expr, alias));
+            if self.next_if_token(Token::Comma).is_none() {
+                break;
+            }
+        }
+        Ok(select)
+    }
+
     fn parse_where_clause(&mut self) -> RSDBResult<Option<(String, Expression)>> {
         if self.next_if_token(Token::Keyword(Keyword::Where)).is_none() {
             return Ok(None);
@@ -313,6 +335,7 @@ impl<'a> Parser<'a> {
     // 解析表达式
     fn parse_expression(&mut self) -> RSDBResult<ast::Expression> {
         Ok(match self.next()? {
+            Token::Ident(ident) => ast::Expression::Field(ident),
             Token::Number(n) => {
                 if n.chars().all(|c| c.is_ascii_digit()) {
                     // 整数
@@ -475,6 +498,7 @@ mod tests {
         assert_eq!(
             stm,
             ast::Statement::Select {
+                select: vec![],
                 table_name: "tab1".to_string(),
                 order_by: vec![],
                 limit: None,
@@ -482,11 +506,16 @@ mod tests {
             }
         );
 
-        let sql = "select * from tbl1 order by a, b asc, c desc limit 1 offset 2;";
+        let sql = "select a as col1, b as col2, c from tbl1 order by a, b asc, c desc limit 1 offset 2;";
         let stm = Parser::new(sql).parse()?;
         assert_eq!(
             stm,
             ast::Statement::Select {
+                select: vec![
+                    (Expression::Field("a".to_string()), Some("col1".to_string())),
+                    (Expression::Field("b".to_string()), Some("col2".to_string())),
+                    (Expression::Field("c".to_string()), None),
+                ],
                 table_name: "tbl1".to_string(),
                 order_by: vec![
                     ("a".to_string(), ast::OrderDirection::Asc),

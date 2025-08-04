@@ -15,6 +15,7 @@ pub enum Statement {
         values: Vec<Vec<Expression>>,
     },
     Select {
+        select: Vec<(Expression, Option<String>)>,
         table_name: String,
         order_by: Vec<(String, OrderDirection)>,
         limit: Option<Expression>,
@@ -41,9 +42,10 @@ pub struct Column {
     pub primary_key: bool,
 }
 
-// 表达式定义，目前只有常量
+// 表达式定义，目前只有常量和列名
 #[derive(Debug, PartialEq, Clone)]
 pub enum Expression {
+    Field(String),  // 列名
     Consts(Consts),
 }
 
