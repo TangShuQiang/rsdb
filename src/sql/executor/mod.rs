@@ -3,6 +3,7 @@ use crate::{
     sql::{
         engine::Transaction,
         executor::{
+            join::NestLoopJoin,
             mutation::{Delete, Insert, Update},
             query::{Limit, Offset, Order, Projection, Scan},
             schema::CreateTable,
@@ -12,6 +13,7 @@ use crate::{
     },
 };
 
+mod join;
 mod mutation;
 mod query;
 mod schema;
@@ -41,6 +43,9 @@ impl<T: Transaction + 'static> dyn Executor<T> {
             Node::Limit { source, limit } => Limit::new(Self::build(*source), limit),
             Node::Offset { source, offset } => Offset::new(Self::build(*source), offset),
             Node::Projection { source, exprs } => Projection::new(Self::build(*source), exprs),
+            Node::NestLoopJoin { left, right } => {
+                NestLoopJoin::new(Self::build(*left), Self::build(*right))
+            }
         }
     }
 }

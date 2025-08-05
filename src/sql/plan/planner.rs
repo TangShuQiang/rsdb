@@ -55,15 +55,14 @@ impl Planner {
             },
             ast::Statement::Select {
                 select,
-                table_name,
+                from,
                 order_by,
                 limit,
                 offset,
             } => {
-                let mut node = Node::Scan {
-                    table_name,
-                    filter: None,
-                };
+                // from
+                let mut node = self.build_from_item(from)?;
+                // order by
                 if !order_by.is_empty() {
                     node = Node::Order {
                         source: Box::new(node),
@@ -128,6 +127,27 @@ impl Planner {
                     table_name,
                     filter: where_clause,
                 }),
+            },
+        };
+        Ok(node)
+    }
+
+    fn build_from_item(&self, item: ast::FromItem) -> RSDBResult<Node> {
+        let node = match item {
+            ast::FromItem::Table { name } => Node::Scan {
+                table_name: name,
+                filter: None,
+            },
+            ast::FromItem::Join {
+                left,
+                right,
+                join_type,
+            } => match join_type {
+                ast::JoinType::Cross => Node::NestLoopJoin {
+                    left: Box::new(self.build_from_item(*left)?),
+                    right: Box::new(self.build_from_item(*right)?),
+                },
+                _ => todo!(),
             },
         };
         Ok(node)

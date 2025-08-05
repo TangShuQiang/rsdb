@@ -75,6 +75,8 @@ pub enum Keyword {
     Limit,
     Offset,
     As,
+    Cross,
+    Join,
 }
 
 impl Keyword {
@@ -115,6 +117,8 @@ impl Keyword {
             "LIMIT" => Keyword::Limit,
             "OFFSET" => Keyword::Offset,
             "AS" => Keyword::As,
+            "CROSS" => Keyword::Cross,
+            "JOIN" => Keyword::Join,
             _ => return None,
         })
     }
@@ -155,6 +159,8 @@ impl Keyword {
             Keyword::Limit => "LIMIT",
             Keyword::Offset => "OFFSET",
             Keyword::As => "AS",
+            Keyword::Cross => "CROSS",
+            Keyword::Join => "JOIN",
         }
     }
 }
@@ -177,10 +183,12 @@ impl<'a> Iterator for Lexer<'a> {
     fn next(&mut self) -> Option<Self::Item> {
         match self.scan() {
             Ok(Some(token)) => Some(Ok(token)),
-            Ok(None) => self
-                .iter
-                .peek()
-                .map(|c| Err(RSDBError::Parse(format!("[Lexer] Unexpected character: {}", c)))),
+            Ok(None) => self.iter.peek().map(|c| {
+                Err(RSDBError::Parse(format!(
+                    "[Lexer] Unexpected character: {}",
+                    c
+                )))
+            }),
             Err(err) => Some(Err(err)),
         }
     }

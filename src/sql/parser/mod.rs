@@ -71,15 +71,9 @@ impl<'a> Parser<'a> {
 
     // 解析 Select 语句
     fn parse_select(&mut self) -> RSDBResult<ast::Statement> {
-        // 解析 Select 的列信息
-        let select = self.parse_select_clause()?;
-        self.next_expect(Token::Keyword(Keyword::From))?;
-
-        // 表名
-        let table_name = self.next_ident()?;
         Ok(ast::Statement::Select {
-            select,
-            table_name,
+            select: self.parse_select_clause()?,
+            from: self.parse_from_clause()?,
             order_by: self.parse_order_clause()?,
             limit: {
                 if self.next_if_token(Token::Keyword(Keyword::Limit)).is_some() {
@@ -222,6 +216,38 @@ impl<'a> Parser<'a> {
             }
         }
         Ok(select)
+    }
+
+    fn parse_from_clause(&mut self) -> RSDBResult<ast::FromItem> {
+        self.next_expect(Token::Keyword(Keyword::From))?;
+        // 第一个表名
+        let mut item = self.parse_from_table_clause()?;
+        // 是否有 Join
+        while let Some(join_type) = self.parse_from_clause_join()? {
+            let left = Box::new(item);
+            let right = Box::new(self.parse_from_table_clause()?);
+            item = ast::FromItem::Join {
+                left,
+                right,
+                join_type,
+            };
+        }
+        Ok(item)
+    }
+
+    fn parse_from_table_clause(&mut self) -> RSDBResult<ast::FromItem> {
+        Ok(ast::FromItem::Table {
+            name: self.next_ident()?,
+        })
+    }
+
+    fn parse_from_clause_join(&mut self) -> RSDBResult<Option<ast::JoinType>> {
+        // 是否是 Cross Join
+        if self.next_if_token(Token::Keyword(Keyword::Cross)).is_some() {
+            self.next_expect(Token::Keyword(Keyword::Join))?;
+            return Ok(Some(ast::JoinType::Cross));
+        }
+        Ok(None)
     }
 
     fn parse_where_clause(&mut self) -> RSDBResult<Option<(String, Expression)>> {
@@ -499,14 +525,17 @@ mod tests {
             stm,
             ast::Statement::Select {
                 select: vec![],
-                table_name: "tab1".to_string(),
+                from: ast::FromItem::Table {
+                    name: "tab1".to_string()
+                },
                 order_by: vec![],
                 limit: None,
                 offset: None,
             }
         );
 
-        let sql = "select a as col1, b as col2, c from tbl1 order by a, b asc, c desc limit 1 offset 2;";
+        let sql =
+            "select a as col1, b as col2, c from tbl1 order by a, b asc, c desc limit 1 offset 2;";
         let stm = Parser::new(sql).parse()?;
         assert_eq!(
             stm,
@@ -516,7 +545,9 @@ mod tests {
                     (Expression::Field("b".to_string()), Some("col2".to_string())),
                     (Expression::Field("c".to_string()), None),
                 ],
-                table_name: "tbl1".to_string(),
+                from: ast::FromItem::Table {
+                    name: "tab1".to_string()
+                },
                 order_by: vec![
                     ("a".to_string(), ast::OrderDirection::Asc),
                     ("b".to_string(), ast::OrderDirection::Asc),
@@ -524,6 +555,33 @@ mod tests {
                 ],
                 limit: Some(Expression::Consts(Consts::Integer(1))),
                 offset: Some(Expression::Consts(Consts::Integer(2))),
+            }
+        );
+
+        let sql = "select * from tbl1 cross join tbl2 cross join tbl3;";
+        let stm = Parser::new(sql).parse()?;
+        assert_eq!(
+            stm,
+            ast::Statement::Select {
+                select: vec![],
+                from: ast::FromItem::Join {
+                    left: Box::new(ast::FromItem::Join {
+                        left: Box::new(ast::FromItem::Table {
+                            name: "tbl1".to_string()
+                        }),
+                        right: Box::new(ast::FromItem::Table {
+                            name: "tbl2".to_string()
+                        }),
+                        join_type: ast::JoinType::Cross,
+                    }),
+                    right: Box::new(ast::FromItem::Table {
+                        name: "tbl3".to_string()
+                    }),
+                    join_type: ast::JoinType::Cross,
+                },
+                order_by: vec![],
+                limit: None,
+                offset: None,
             }
         );
         Ok(())

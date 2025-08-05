@@ -16,7 +16,7 @@ pub enum Statement {
     },
     Select {
         select: Vec<(Expression, Option<String>)>,
-        table_name: String,
+        from: FromItem,
         order_by: Vec<(String, OrderDirection)>,
         limit: Option<Expression>,
         offset: Option<Expression>,
@@ -45,7 +45,7 @@ pub struct Column {
 // 表达式定义，目前只有常量和列名
 #[derive(Debug, PartialEq, Clone)]
 pub enum Expression {
-    Field(String),  // 列名
+    Field(String), // 列名
     Consts(Consts),
 }
 
@@ -68,4 +68,24 @@ pub enum Consts {
 pub enum OrderDirection {
     Asc,
     Desc,
+}
+
+#[derive(Debug, PartialEq)]
+pub enum FromItem {
+    Table {
+        name: String,
+    },
+    Join {
+        left: Box<FromItem>,
+        right: Box<FromItem>,
+        join_type: JoinType,
+    },
+}
+
+#[derive(Debug, PartialEq)]
+pub enum JoinType {
+    Cross,
+    Inner,
+    Left,
+    Right,
 }
