@@ -75,6 +75,8 @@ pub enum Node {
     NestLoopJoin {
         left: Box<Node>,
         right: Box<Node>,
+        predicate: Option<Expression>,
+        outer: bool,
     },
 }
 

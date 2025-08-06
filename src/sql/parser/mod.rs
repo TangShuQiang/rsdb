@@ -6,7 +6,7 @@ use lexer::{Keyword, Lexer, Token};
 use super::types::DataType;
 use crate::{
     error::{RSDBError, RSDBResult},
-    sql::parser::ast::{Expression, OrderDirection},
+    sql::parser::ast::{Expression, Operation, OrderDirection},
 };
 
 pub mod ast;
@@ -226,10 +226,28 @@ impl<'a> Parser<'a> {
         while let Some(join_type) = self.parse_from_clause_join()? {
             let left = Box::new(item);
             let right = Box::new(self.parse_from_table_clause()?);
+            // 解析 Join 条件
+            let predicate = match join_type {
+                ast::JoinType::Cross => None,
+                _ => {
+                    self.next_expect(Token::Keyword(Keyword::On))?;
+                    let l = self.parse_expression()?;
+                    self.next_expect(Token::Equal)?;
+                    let r = self.parse_expression()?;
+                    let (l, r) = match join_type {
+                        ast::JoinType::Right => (r, l), // Right Join 时交换左右
+                        _ => (l, r),
+                    };
+                    let cond = Operation::Equal(Box::new(l), Box::new(r));
+                    Some(ast::Expression::Operation(cond))
+                }
+            };
+
             item = ast::FromItem::Join {
                 left,
                 right,
                 join_type,
+                predicate,
             };
         }
         Ok(item)
@@ -242,12 +260,20 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_from_clause_join(&mut self) -> RSDBResult<Option<ast::JoinType>> {
-        // 是否是 Cross Join
         if self.next_if_token(Token::Keyword(Keyword::Cross)).is_some() {
             self.next_expect(Token::Keyword(Keyword::Join))?;
-            return Ok(Some(ast::JoinType::Cross));
+            Ok(Some(ast::JoinType::Cross)) // Cross Join
+        } else if self.next_if_token(Token::Keyword(Keyword::Join)).is_some() {
+            Ok(Some(ast::JoinType::Inner)) // Inner Join
+        } else if self.next_if_token(Token::Keyword(Keyword::Left)).is_some() {
+            self.next_expect(Token::Keyword(Keyword::Join))?;
+            Ok(Some(ast::JoinType::Left)) // Left Join
+        } else if self.next_if_token(Token::Keyword(Keyword::Right)).is_some() {
+            self.next_expect(Token::Keyword(Keyword::Join))?;
+            Ok(Some(ast::JoinType::Right)) // Right Join
+        } else {
+            Ok(None)
         }
-        Ok(None)
     }
 
     fn parse_where_clause(&mut self) -> RSDBResult<Option<(String, Expression)>> {
@@ -546,7 +572,7 @@ mod tests {
                     (Expression::Field("c".to_string()), None),
                 ],
                 from: ast::FromItem::Table {
-                    name: "tab1".to_string()
+                    name: "tbl1".to_string()
                 },
                 order_by: vec![
                     ("a".to_string(), ast::OrderDirection::Asc),
@@ -573,11 +599,13 @@ mod tests {
                             name: "tbl2".to_string()
                         }),
                         join_type: ast::JoinType::Cross,
+                        predicate: None,
                     }),
                     right: Box::new(ast::FromItem::Table {
                         name: "tbl3".to_string()
                     }),
                     join_type: ast::JoinType::Cross,
+                    predicate: None,
                 },
                 order_by: vec![],
                 limit: None,
@@ -601,7 +629,7 @@ mod tests {
                 ]
                 .into_iter()
                 .collect(),
-                where_clause: Some(("c".into(), ast::Consts::String("3".to_string()).into())),
+                where_clause: Some(("c".into(), ast::Consts::String("a".to_string()).into())),
             }
         );
         Ok(())

@@ -536,7 +536,7 @@ mod tests {
     }
 
     #[test]
-    fn test_join() -> RSDBResult<()> {
+    fn test_cross_join() -> RSDBResult<()> {
         let p = tempfile::tempdir()?.keep().join("sqldb-log");
         let kvengine = KVEngine::new(DiskEngine::new(p.clone())?);
         let s = kvengine.session()?;
@@ -555,6 +555,34 @@ mod tests {
                 // for row in rows {
                 //     println!("{:?}", row);
                 // }
+            }
+            _ => unreachable!(),
+        }
+
+        std::fs::remove_dir_all(p.parent().unwrap())?;
+        Ok(())
+    }
+
+    #[test]
+    fn test_join() -> RSDBResult<()> {
+        let p = tempfile::tempdir()?.keep().join("sqldb-log");
+        let kvengine = KVEngine::new(DiskEngine::new(p.clone())?);
+        let s = kvengine.session()?;
+        s.execute("create table t1 (a int primary key);")?;
+        s.execute("create table t2 (b int primary key);")?;
+        s.execute("create table t3 (c int primary key);")?;
+
+        s.execute("insert into t1 values (1), (2), (3);")?;
+        s.execute("insert into t2 values (2), (3), (4);")?;
+        s.execute("insert into t3 values (3), (8), (9);")?;
+
+        match s.execute("select * from t1 right join t2 on a = b join t3 on a = c;")? {
+            ResultSet::Scan { columns, rows } => {
+                assert_eq!(3, columns.len());
+                assert_eq!(1, rows.len());
+                for row in rows {
+                    println!("{:?}", row);
+                }
             }
             _ => unreachable!(),
         }
