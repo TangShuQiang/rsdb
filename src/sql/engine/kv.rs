@@ -4,7 +4,7 @@ use crate::{
     error::{RSDBError, RSDBResult},
     sql::{
         engine::{Engine, Transaction},
-        parser::ast::Expression,
+        parser::ast::{Expression, evaluate_expr},
         schema::Table,
         types::{Row, Value},
     },
@@ -113,21 +113,30 @@ impl<E: StorageEngine> Transaction for KVTransaction<E> {
         self.txn.delete(key)
     }
 
-    fn scan_table(
-        &self,
-        table: &Table,
-        filter: Option<(String, Expression)>,
-    ) -> RSDBResult<Vec<Row>> {
+    fn scan_table(&self, table: &Table, filter: Option<Expression>) -> RSDBResult<Vec<Row>> {
         let prefix = KeyPrefix::Row(table.name.clone()).encode()?;
         let results = self.txn.scan_prefix(prefix)?;
         let mut rows = Vec::new();
         for result in results {
             // 过滤数据
             let row: Row = bincode::deserialize(&result.value)?;
-            if let Some((col, expr)) = &filter {
-                let col_index = table.get_col_index(&col)?;
-                if Value::from_expression(expr.clone()) == row[col_index] {
-                    rows.push(row);
+            if let Some(expr) = &filter {
+                let cols = table
+                    .columns
+                    .iter()
+                    .map(|c| c.name.clone())
+                    .collect::<Vec<_>>();
+                match evaluate_expr(expr, &cols, &row, &cols, &row)? {
+                    Value::Null => continue,
+                    Value::Boolean(false) => continue,
+                    Value::Boolean(true) => {
+                        rows.push(row);
+                    }
+                    _ => {
+                        return Err(RSDBError::Internal(
+                            "evaluate_expr must return a boolean".to_string(),
+                        ));
+                    }
                 }
             } else {
                 rows.push(row);
@@ -698,6 +707,42 @@ mod tests {
                         ],
                     ]
                 );
+            }
+            _ => unreachable!(),
+        }
+
+        std::fs::remove_dir_all(p.parent().unwrap())?;
+        Ok(())
+    }
+
+    #[test]
+    fn test_filter() -> RSDBResult<()> {
+        let p = tempfile::tempdir()?.keep().join("rsdb-log");
+        let kvengine = KVEngine::new(DiskEngine::new(p.clone())?);
+        let s = kvengine.session()?;
+        s.execute("create table t1 (a int primary key, b text, c float, d bool);")?;
+
+        s.execute("insert into t1 values (1, 'aa', 3.1, true);")?;
+        s.execute("insert into t1 values (2, 'bb', 5.3, true);")?;
+        s.execute("insert into t1 values (3, null, NULL, false);")?;
+        s.execute("insert into t1 values (4, null, 4.6, false);")?;
+        s.execute("insert into t1 values (5, 'bb', 5.8, true);")?;
+        s.execute("insert into t1 values (6, 'dd', 1.4, false);")?;
+
+        match s.execute("select * from t1 where d < true;")? {
+            ResultSet::Scan { columns, rows } => {
+                assert_eq!(4, columns.len());
+                assert_eq!(3, rows.len());
+            }
+            _ => unreachable!(),
+        }
+
+        match s.execute(
+            "select b, sum(c) as sum_c from t1 group by b having sum_c < 5 order by sum_c;",
+        )? {
+            ResultSet::Scan { columns, rows } => {
+                assert_eq!(2, columns.len());
+                assert_eq!(3, rows.len());
             }
             _ => unreachable!(),
         }

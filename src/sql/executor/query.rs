@@ -5,17 +5,18 @@ use crate::{
     sql::{
         engine::Transaction,
         executor::{Executor, ResultSet},
-        parser::ast::{Expression, OrderDirection},
+        parser::ast::{Expression, OrderDirection, evaluate_expr},
+        types::Value,
     },
 };
 
 pub struct Scan {
     table_name: String,
-    filter: Option<(String, Expression)>,
+    filter: Option<Expression>,
 }
 
 impl Scan {
-    pub fn new(table_name: String, filter: Option<(String, Expression)>) -> Box<Self> {
+    pub fn new(table_name: String, filter: Option<Expression>) -> Box<Self> {
         Box::new(Self { table_name, filter })
     }
 }
@@ -199,6 +200,52 @@ impl<T: Transaction> Executor<T> for Projection<T> {
             _ => {
                 return Err(RSDBError::Internal(
                     "Project source must be a Scan".to_string(),
+                ));
+            }
+        }
+    }
+}
+
+pub struct Filter<T: Transaction> {
+    source: Box<dyn Executor<T>>,
+    predicate: Expression,
+}
+
+impl<T: Transaction> Filter<T> {
+    pub fn new(source: Box<dyn Executor<T>>, predicate: Expression) -> Box<Self> {
+        Box::new(Self { source, predicate })
+    }
+}
+
+impl<T: Transaction> Executor<T> for Filter<T> {
+    fn execute(self: Box<Self>, txn: &mut T) -> RSDBResult<ResultSet> {
+        match self.source.execute(txn)? {
+            ResultSet::Scan { columns, rows } => {
+                let mut new_rows = Vec::new();
+                for row in rows {
+                    match evaluate_expr(&self.predicate, &columns, &row, &columns, &row)? {
+                        Value::Null => {}
+                        Value::Boolean(false) => {}
+                        Value::Boolean(true) => {
+                            new_rows.push(row);
+                        }
+                        _ => {
+                            return Err(RSDBError::Internal(
+                                "
+                                Predicate must evaluate to a boolean value"
+                                    .to_string(),
+                            ));
+                        }
+                    }
+                }
+                Ok(ResultSet::Scan {
+                    columns,
+                    rows: new_rows,
+                })
+            }
+            _ => {
+                return Err(RSDBError::Internal(
+                    "Filter source must be a Scan".to_string(),
                 ));
             }
         }

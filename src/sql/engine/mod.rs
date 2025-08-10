@@ -39,7 +39,7 @@ pub trait Transaction {
     // 删除行
     fn delete_row(&self, table: &Table, pk: &Value) -> RSDBResult<()>;
     // 扫描表
-    fn scan_table(&self, table: &Table, filter: Option<(String, Expression)>) -> RSDBResult<Vec<Row>>;
+    fn scan_table(&self, table: &Table, filter: Option<Expression>) -> RSDBResult<Vec<Row>>;
 
     // DDL 相关操作
     fn create_table(&self, table: Table) -> RSDBResult<()>;

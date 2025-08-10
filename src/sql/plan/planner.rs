@@ -56,14 +56,23 @@ impl Planner {
             ast::Statement::Select {
                 select,
                 from,
+                where_clause,
                 group_by,
+                having,
                 order_by,
                 limit,
                 offset,
             } => {
                 // from
                 let mut node = self.build_from_item(from)?;
-                // aggregate
+                // where
+                if let Some(expr) = where_clause {
+                    node = Node::Filter {
+                        source: Box::new(node),
+                        predicate: expr,
+                    }
+                }
+                // aggregate, group by
                 let mut has_agg = false;
                 if !select.is_empty() {
                     for (expr, _) in select.iter() {
@@ -81,6 +90,13 @@ impl Planner {
                             exprs: select.clone(),
                             group_by,
                         }
+                    }
+                }
+                // having
+                if let Some(expr) = having {
+                    node = Node::Filter {
+                        source: Box::new(node),
+                        predicate: expr,
                     }
                 }
                 // order by

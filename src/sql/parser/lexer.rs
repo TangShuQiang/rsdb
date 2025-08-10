@@ -17,6 +17,8 @@ pub enum Token {
     Minus,            // 减号 -
     Slash,            // 斜杠 /
     Equal,            // 等号 =
+    GreaterThan,      // 大于 >
+    LessThan,         // 小于 <
 }
 
 impl Display for Token {
@@ -35,6 +37,8 @@ impl Display for Token {
             Token::Minus => "-",
             Token::Slash => "/",
             Token::Equal => "=",
+            Token::GreaterThan => ">",
+            Token::LessThan => "<",
         })
     }
 }
@@ -81,6 +85,7 @@ pub enum Keyword {
     Right,
     On,
     Group,
+    Having,
 }
 
 impl Keyword {
@@ -127,6 +132,7 @@ impl Keyword {
             "RIGHT" => Keyword::Right,
             "ON" => Keyword::On,
             "GROUP" => Keyword::Group,
+            "HAVING" => Keyword::Having,
             _ => return None,
         })
     }
@@ -173,6 +179,7 @@ impl Keyword {
             Keyword::Right => "RIGHT",
             Keyword::On => "ON",
             Keyword::Group => "GROUP",
+            Keyword::Having => "HAVING",
         }
     }
 }
@@ -312,6 +319,8 @@ impl<'a> Lexer<'a> {
             '-' => Some(Token::Minus),
             '/' => Some(Token::Slash),
             '=' => Some(Token::Equal),
+            '>' => Some(Token::GreaterThan),
+            '<' => Some(Token::LessThan),
             _ => None,
         })
     }
