@@ -74,6 +74,7 @@ impl<'a> Parser<'a> {
         Ok(ast::Statement::Select {
             select: self.parse_select_clause()?,
             from: self.parse_from_clause()?,
+            group_by: self.parse_group_clause()?,
             order_by: self.parse_order_clause()?,
             limit: {
                 if self.next_if_token(Token::Keyword(Keyword::Limit)).is_some() {
@@ -251,6 +252,14 @@ impl<'a> Parser<'a> {
             };
         }
         Ok(item)
+    }
+
+    fn parse_group_clause(&mut self) -> RSDBResult<Option<Expression>> {
+        if self.next_if_token(Token::Keyword(Keyword::Group)).is_none() {
+            return Ok(None);
+        }
+        self.next_expect(Token::Keyword(Keyword::By))?;
+        Ok(Some(self.parse_expression()?))
     }
 
     fn parse_from_table_clause(&mut self) -> RSDBResult<ast::FromItem> {
@@ -564,6 +573,7 @@ mod tests {
                 from: ast::FromItem::Table {
                     name: "tab1".to_string()
                 },
+                group_by: None,
                 order_by: vec![],
                 limit: None,
                 offset: None,
@@ -584,6 +594,7 @@ mod tests {
                 from: ast::FromItem::Table {
                     name: "tbl1".to_string()
                 },
+                group_by: None,
                 order_by: vec![
                     ("a".to_string(), ast::OrderDirection::Asc),
                     ("b".to_string(), ast::OrderDirection::Asc),
@@ -617,6 +628,7 @@ mod tests {
                     join_type: ast::JoinType::Cross,
                     predicate: None,
                 },
+                group_by: None,
                 order_by: vec![],
                 limit: None,
                 offset: None,
@@ -645,6 +657,36 @@ mod tests {
                 from: ast::FromItem::Table {
                     name: "tbl1".to_string()
                 },
+                group_by: None,
+                order_by: vec![],
+                limit: None,
+                offset: None,
+            }
+        );
+
+        let sql = "select count(a), min(b), max(c) from tbl1 group by a;";
+        let stm = Parser::new(sql).parse()?;
+        assert_eq!(
+            stm,
+            ast::Statement::Select {
+                select: vec![
+                    (
+                        Expression::Function("count".to_string(), "a".to_string()),
+                        None
+                    ),
+                    (
+                        Expression::Function("min".to_string(), "b".to_string()),
+                        None
+                    ),
+                    (
+                        Expression::Function("max".to_string(), "c".to_string()),
+                        None
+                    ),
+                ],
+                from: ast::FromItem::Table {
+                    name: "tbl1".to_string()
+                },
+                group_by: Some(Expression::Field("a".to_string())),
                 order_by: vec![],
                 limit: None,
                 offset: None,

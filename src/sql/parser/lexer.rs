@@ -80,6 +80,7 @@ pub enum Keyword {
     Left,
     Right,
     On,
+    Group,
 }
 
 impl Keyword {
@@ -125,6 +126,7 @@ impl Keyword {
             "LEFT" => Keyword::Left,
             "RIGHT" => Keyword::Right,
             "ON" => Keyword::On,
+            "GROUP" => Keyword::Group,
             _ => return None,
         })
     }
@@ -170,6 +172,7 @@ impl Keyword {
             Keyword::Left => "LEFT",
             Keyword::Right => "RIGHT",
             Keyword::On => "ON",
+            Keyword::Group => "GROUP",
         }
     }
 }

@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::{
     error::{RSDBError, RSDBResult},
     sql::{
@@ -11,14 +13,20 @@ use crate::{
 pub struct Aggregate<T: Transaction> {
     source: Box<dyn Executor<T>>,
     exprs: Vec<(Expression, Option<String>)>,
+    group_by: Option<Expression>,
 }
 
 impl<T: Transaction> Aggregate<T> {
     pub fn new(
         source: Box<dyn Executor<T>>,
         exprs: Vec<(Expression, Option<String>)>,
+        group_by: Option<Expression>,
     ) -> Box<Self> {
-        Box::new(Self { source, exprs })
+        Box::new(Self {
+            source,
+            exprs,
+            group_by,
+        })
     }
 }
 
@@ -27,21 +35,81 @@ impl<T: Transaction> Executor<T> for Aggregate<T> {
         if let ResultSet::Scan { columns, rows } = self.source.execute(txn)? {
             let mut new_cols = Vec::new();
             let mut new_rows = Vec::new();
-            for (expr, alias) in self.exprs {
-                if let ast::Expression::Function(func_name, col_name) = expr {
-                    let calculator = <dyn Calculator>::build(&func_name)?;
-                    let val = calculator.calc(&col_name, &columns, &rows)?;
-                    new_cols.push(alias.unwrap_or(format!(
-                        "{}({})",
-                        func_name.to_uppercase(),
-                        col_name
-                    )));
-                    new_rows.push(val);
+
+            // 计算函数
+            let mut calc = |col_val: Option<&Value>,
+                            rows: &Vec<Vec<Value>>|
+             -> RSDBResult<Vec<Value>> {
+                let mut new_row = Vec::new();
+                for (expr, alias) in &self.exprs {
+                    match expr {
+                        ast::Expression::Function(func_name, col_name) => {
+                            let calculator = <dyn Calculator>::build(func_name)?;
+                            let val = calculator.calc(col_name, &columns, rows)?;
+
+                            if new_cols.len() < self.exprs.len() {
+                                new_cols.push(alias.clone().unwrap_or(format!(
+                                    "{}({})",
+                                    func_name.to_uppercase(),
+                                    col_name
+                                )));
+                            }
+                            new_row.push(val);
+                        }
+                        ast::Expression::Field(col_name) => {
+                            if let Some(ast::Expression::Field(group_col)) = &self.group_by {
+                                if col_name != group_col {
+                                    return Err(RSDBError::Internal(format!(
+                                        "{} must apppear in the GROUP BY clause or be used in an aggregate function",
+                                        col_name
+                                    )));
+                                }
+                            }
+                            if new_cols.len() < self.exprs.len() {
+                                new_cols.push(alias.clone().unwrap_or(col_name.clone()));
+                            }
+                            new_row.push(col_val.unwrap().clone());
+                        }
+                        _ => {
+                            return Err(RSDBError::Internal(format!(
+                                "unsupported expression in aggregate: {:?}",
+                                expr
+                            )));
+                        }
+                    }
                 }
+                Ok(new_row)
+            };
+
+            if let Some(ast::Expression::Field(group_col)) = &self.group_by {
+                // 对数据进行分组，然后计算每组的统计
+                let pos = match columns.iter().position(|c| c == group_col) {
+                    Some(pos) => pos,
+                    None => {
+                        return Err(RSDBError::Internal(format!(
+                            "group by column {} not found",
+                            group_col
+                        )));
+                    }
+                };
+                // 针对 Group By 列进行分组
+                let mut agg_map = HashMap::new();
+                for row in rows.iter() {
+                    let key = &row[pos];
+                    let value = agg_map.entry(key).or_insert(Vec::new());
+                    value.push(row.clone());
+                }
+                for (key, rows) in agg_map {
+                    let row = calc(Some(key), &rows)?;
+                    new_rows.push(row);
+                }
+            } else {
+                let row = calc(None, &rows)?;
+                new_rows.push(row);
             }
             return Ok(ResultSet::Scan {
                 columns: new_cols,
-                rows: vec![new_rows],
+                rows: new_rows,
             });
         }
         Err(RSDBError::Internal(

@@ -83,6 +83,7 @@ pub enum Node {
     Aggregate {
         source: Box<Node>,
         exprs: Vec<(Expression, Option<String>)>,
+        group_by: Option<Expression>,
     },
 }
 
