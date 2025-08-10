@@ -48,6 +48,7 @@ pub enum Expression {
     Field(String), // 列名
     Consts(Consts),
     Operation(Operation),
+    Function(String, String), // 聚集函数名和参数
 }
 
 impl From<Consts> for Expression {

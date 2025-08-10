@@ -387,7 +387,17 @@ impl<'a> Parser<'a> {
     // 解析表达式
     fn parse_expression(&mut self) -> RSDBResult<ast::Expression> {
         Ok(match self.next()? {
-            Token::Ident(ident) => ast::Expression::Field(ident),
+            Token::Ident(ident) => {
+                // 函数
+                if self.next_if_token(Token::OpenParen).is_some() {
+                    let col_name = self.next_ident()?;
+                    self.next_expect(Token::CloseParen)?;
+                    ast::Expression::Function(ident, col_name)
+                } else {
+                    // 列名
+                    ast::Expression::Field(ident)
+                }
+            }
             Token::Number(n) => {
                 if n.chars().all(|c| c.is_ascii_digit()) {
                     // 整数
@@ -612,6 +622,35 @@ mod tests {
                 offset: None,
             }
         );
+
+        let sql = "select count(a), min(b), max(c) from tbl1;";
+        let stm = Parser::new(sql).parse()?;
+        assert_eq!(
+            stm,
+            ast::Statement::Select {
+                select: vec![
+                    (
+                        Expression::Function("count".to_string(), "a".to_string()),
+                        None
+                    ),
+                    (
+                        Expression::Function("min".to_string(), "b".to_string()),
+                        None
+                    ),
+                    (
+                        Expression::Function("max".to_string(), "c".to_string()),
+                        None
+                    ),
+                ],
+                from: ast::FromItem::Table {
+                    name: "tbl1".to_string()
+                },
+                order_by: vec![],
+                limit: None,
+                offset: None,
+            }
+        );
+
         Ok(())
     }
 

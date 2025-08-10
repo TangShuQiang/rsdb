@@ -272,7 +272,7 @@ mod tests {
 
     #[test]
     fn test_create_table() -> RSDBResult<()> {
-        let p = tempfile::tempdir()?.keep().join("sqldb-log");
+        let p = tempfile::tempdir()?.keep().join("rsdb-log");
         let kvengine = KVEngine::new(DiskEngine::new(p.clone())?);
         let mut s = kvengine.session()?;
         setup_table(&mut s)?;
@@ -282,7 +282,7 @@ mod tests {
 
     #[test]
     fn test_insert() -> RSDBResult<()> {
-        let p = tempfile::tempdir()?.keep().join("sqldb-log");
+        let p = tempfile::tempdir()?.keep().join("rsdb-log");
         let kvengine = KVEngine::new(DiskEngine::new(p.clone())?);
         let mut s = kvengine.session()?;
         setup_table(&mut s)?;
@@ -362,7 +362,7 @@ mod tests {
 
     #[test]
     fn test_update() -> RSDBResult<()> {
-        let p = tempfile::tempdir()?.keep().join("sqldb-log");
+        let p = tempfile::tempdir()?.keep().join("rsdb-log");
         let kvengine = KVEngine::new(DiskEngine::new(p.clone())?);
         let mut s = kvengine.session()?;
         setup_table(&mut s)?;
@@ -430,7 +430,7 @@ mod tests {
 
     #[test]
     fn test_delete() -> RSDBResult<()> {
-        let p = tempfile::tempdir()?.keep().join("sqldb-log");
+        let p = tempfile::tempdir()?.keep().join("rsdb-log");
         let kvengine = KVEngine::new(DiskEngine::new(p.clone())?);
         let mut s = kvengine.session()?;
         setup_table(&mut s)?;
@@ -506,7 +506,7 @@ mod tests {
 
     #[test]
     fn test_sort() -> RSDBResult<()> {
-        let p = tempfile::tempdir()?.keep().join("sqldb-log");
+        let p = tempfile::tempdir()?.keep().join("rsdb-log");
         let kvengine = KVEngine::new(DiskEngine::new(p.clone())?);
         let mut s = kvengine.session()?;
         setup_table(&mut s)?;
@@ -537,7 +537,7 @@ mod tests {
 
     #[test]
     fn test_cross_join() -> RSDBResult<()> {
-        let p = tempfile::tempdir()?.keep().join("sqldb-log");
+        let p = tempfile::tempdir()?.keep().join("rsdb-log");
         let kvengine = KVEngine::new(DiskEngine::new(p.clone())?);
         let s = kvengine.session()?;
         s.execute("create table t1 (a int primary key);")?;
@@ -565,7 +565,7 @@ mod tests {
 
     #[test]
     fn test_join() -> RSDBResult<()> {
-        let p = tempfile::tempdir()?.keep().join("sqldb-log");
+        let p = tempfile::tempdir()?.keep().join("rsdb-log");
         let kvengine = KVEngine::new(DiskEngine::new(p.clone())?);
         let s = kvengine.session()?;
         s.execute("create table t1 (a int primary key);")?;
@@ -583,6 +583,65 @@ mod tests {
                 for row in rows {
                     println!("{:?}", row);
                 }
+            }
+            _ => unreachable!(),
+        }
+
+        std::fs::remove_dir_all(p.parent().unwrap())?;
+        Ok(())
+    }
+
+    #[test]
+    fn test_agg() -> RSDBResult<()> {
+        let p = tempfile::tempdir()?.keep().join("rsdb-log");
+        let kvengine = KVEngine::new(DiskEngine::new(p.clone())?);
+        let s = kvengine.session()?;
+        s.execute("create table t1 (a int primary key, b text, c float);")?;
+
+        s.execute("insert into t1 values (1, 'aa', 3.1);")?;
+        s.execute("insert into t1 values (2, 'cc', 5.3);")?;
+        s.execute("insert into t1 values (3, null, NULL);")?;
+        s.execute("insert into t1 values (4, 'dd', 4.6);")?;
+
+        match s.execute("select count(a) as total, max(b), min(a), sum(c), avg(c) from t1;")? {
+            ResultSet::Scan { columns, rows } => {
+                assert_eq!(
+                    columns,
+                    vec!["total", "MAX(b)", "MIN(a)", "SUM(c)", "AVG(c)"]
+                );
+                assert_eq!(
+                    rows,
+                    vec![vec![
+                        Value::Integer(4),
+                        Value::String("dd".to_string()),
+                        Value::Integer(1),
+                        Value::Float(13.0),
+                        Value::Float(13.0 / 3.0)
+                    ]]
+                );
+            }
+            _ => unreachable!(),
+        }
+
+        s.execute("create table t2 (a int primary key, b text, c float);")?;
+        s.execute("insert into t2 values (1, NULL, NULL);")?;
+        s.execute("insert into t2 values (2, NULL, NULL);")?;
+        match s.execute("select count(a) as total, max(b), min(a), sum(c), avg(c) from t2;")? {
+            ResultSet::Scan { columns, rows } => {
+                assert_eq!(
+                    columns,
+                    vec!["total", "MAX(b)", "MIN(a)", "SUM(c)", "AVG(c)"]
+                );
+                assert_eq!(
+                    rows,
+                    vec![vec![
+                        Value::Integer(2),
+                        Value::Null,
+                        Value::Integer(1),
+                        Value::Null,
+                        Value::Null
+                    ]]
+                );
             }
             _ => unreachable!(),
         }

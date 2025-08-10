@@ -62,6 +62,22 @@ impl Planner {
             } => {
                 // from
                 let mut node = self.build_from_item(from)?;
+                // aggregate
+                let mut has_agg = false;
+                if !select.is_empty() {
+                    for (expr, _) in select.iter() {
+                        if let ast::Expression::Function(_, _) = expr {
+                            has_agg = true;
+                            break;
+                        }
+                    }
+                    if has_agg {
+                        node = Node::Aggregate {
+                            source: Box::new(node),
+                            exprs: select.clone(),
+                        }
+                    }
+                }
                 // order by
                 if !order_by.is_empty() {
                     node = Node::Order {
@@ -98,7 +114,8 @@ impl Planner {
                     }
                 }
                 // projection
-                if !select.is_empty() {
+                // 如果没有聚集函数，则需要投影
+                if !select.is_empty() && !has_agg {
                     node = Node::Projection {
                         source: Box::new(node),
                         exprs: select,

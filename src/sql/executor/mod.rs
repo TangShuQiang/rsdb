@@ -3,6 +3,7 @@ use crate::{
     sql::{
         engine::Transaction,
         executor::{
+            agg::Aggregate,
             join::NestLoopJoin,
             mutation::{Delete, Insert, Update},
             query::{Limit, Offset, Order, Projection, Scan},
@@ -13,6 +14,7 @@ use crate::{
     },
 };
 
+mod agg;
 mod join;
 mod mutation;
 mod query;
@@ -49,6 +51,7 @@ impl<T: Transaction + 'static> dyn Executor<T> {
                 predicate,
                 outer,
             } => NestLoopJoin::new(Self::build(*left), Self::build(*right), predicate, outer),
+            Node::Aggregate { source, exprs } => Aggregate::new(Self::build(*source), exprs),
         }
     }
 }
