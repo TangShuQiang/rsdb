@@ -81,3 +81,29 @@ pub enum ResultSet {
         count: usize,
     },
 }
+
+impl ResultSet {
+    pub fn to_string(&self) -> String {
+        match self {
+            ResultSet::CreateTable { table_name } => format!("CREATE TABLE `{}`", table_name),
+            ResultSet::Insert { count } => format!("INSERT {} ROWS", count),
+            ResultSet::Scan { columns, rows } => {
+                let columns = columns.join(" | ");
+                let rows_len = rows.len();
+                let rows = rows
+                    .iter()
+                    .map(|row| {
+                        row.iter()
+                            .map(|v| v.to_string())
+                            .collect::<Vec<_>>()
+                            .join(" | ")
+                    })
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                format!("{}\n{}\n{} ROWS", columns, rows, rows_len)
+            }
+            ResultSet::Update { count } => format!("UPDATE {} ROWS", count),
+            ResultSet::Delete { count } => format!("DELETE {} ROWS", count),
+        }
+    }
+}
