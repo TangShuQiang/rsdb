@@ -1,12 +1,42 @@
-use tokio::io;
+use rustyline::{DefaultEditor, error::ReadlineError};
 
-use bytes::Bytes;
-use futures::{Sink, SinkExt, Stream, StreamExt, future};
+use futures::{SinkExt, TryStreamExt};
 use std::{error::Error, net::SocketAddr};
 use tokio::net::TcpStream;
-use tokio_util::codec::{BytesCodec, FramedRead, FramedWrite};
+use tokio_util::codec::{FramedRead, FramedWrite, LinesCodec};
 
 use std::env;
+
+const RESPONSE_END: &str = "!!!end!!!";
+
+pub struct Client {
+    addr: SocketAddr,
+}
+
+impl Client {
+    pub fn new(addr: SocketAddr) -> Self {
+        Client { addr }
+    }
+
+    pub async fn execute_sql(&self, sql_cmd: &str) -> Result<(), Box<dyn Error>> {
+        let mut stream = TcpStream::connect(self.addr).await?;
+        let (r, w) = stream.split();
+        let mut sink = FramedWrite::new(w, LinesCodec::new());
+        let mut stream = FramedRead::new(r, LinesCodec::new());
+
+        // 发送命令并执行
+        sink.send(sql_cmd).await?;
+
+        // 拿到结果并打印
+        while let Some(val) = stream.try_next().await? {
+            if val == RESPONSE_END {
+                break;
+            }
+            println!("{}", val);
+        }
+        Ok(())
+    }
+}
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -14,35 +44,30 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .nth(1)
         .unwrap_or_else(|| "127.0.0.1:8080".to_string());
     let addr = addr.parse::<SocketAddr>()?;
-    let stdin = FramedRead::new(io::stdin(), BytesCodec::new());
-    let stdin = stdin.map(|i| i.map(|bytes| bytes.freeze()));
-    let stdout = FramedWrite::new(io::stdout(), BytesCodec::new());
+    let client = Client::new(addr);
 
-    connect(&addr, stdin, stdout).await?;
+    let mut editor = DefaultEditor::new()?;
+    loop {
+        let readline = editor.readline("rsdb> ");
+        match readline {
+            Ok(sql_cmd) => {
+                let sql_cmd = sql_cmd.trim();
+                if sql_cmd.len() > 0 {
+                    if sql_cmd == "exit" || sql_cmd == "quit" {
+                        break;
+                    }
+                    editor.add_history_entry(sql_cmd)?;
+                    client.execute_sql(sql_cmd).await?;
+                }
+            }
+            Err(ReadlineError::Interrupted) => break,
+            Err(ReadlineError::Eof) => break,
+            Err(err) => {
+                eprintln!("Error reading line: {}", err);
+                break;
+            }
+        }
+    }
 
     Ok(())
-}
-
-pub async fn connect(
-    addr: &SocketAddr,
-    mut stdin: impl Stream<Item = Result<Bytes, io::Error>> + Unpin,
-    mut stdout: impl Sink<Bytes, Error = io::Error> + Unpin,
-) -> Result<(), Box<dyn Error>> {
-    let mut stream = TcpStream::connect(addr).await?;
-    let (r, w) = stream.split();
-    let mut sink = FramedWrite::new(w, BytesCodec::new());
-    let mut stream = FramedRead::new(r, BytesCodec::new())
-        .filter_map(|i| match i {
-            Ok(i) => future::ready(Some(i.freeze())),
-            Err(e) => {
-                println!("failed to read from socket; error={e}");
-                future::ready(None)
-            }
-        })
-        .map(Ok);
-
-    match future::join(sink.send_all(&mut stdin), stdout.send_all(&mut stream)).await {
-        (Err(e), _) | (_, Err(e)) => Err(e.into()),
-        _ => Ok(()),
-    }
 }

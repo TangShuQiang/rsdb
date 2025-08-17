@@ -13,6 +13,7 @@ use std::sync::{Arc, Mutex, MutexGuard};
 
 // cargo run --bin server
 const DB_PATH: &str = "/tmp/rsdb-test/redb-log";
+const RESPONSE_END: &str = "!!!end!!!";
 
 enum SqlRequest {
     SQL(String),
@@ -51,6 +52,9 @@ impl<E: sql::engine::Engine + 'static> ServerSession<E> {
                     };
                     if let Err(e) = lines.send(response.as_str()).await {
                         println!("error on sending response; error = {:?}", e);
+                    }
+                    if let Err(e) = lines.send(RESPONSE_END).await {
+                        println!("error on sending end marker; error = {:?}", e);
                     }
                 }
                 Err(e) => {

@@ -88,19 +88,43 @@ impl ResultSet {
             ResultSet::CreateTable { table_name } => format!("CREATE TABLE `{}`", table_name),
             ResultSet::Insert { count } => format!("INSERT {} ROWS", count),
             ResultSet::Scan { columns, rows } => {
-                let columns = columns.join(" | ");
-                let rows_len = rows.len();
+                let row_len = rows.len();
+                // 找到每一列最大的长度
+                let mut max_len = columns.iter().map(|c| c.len()).collect::<Vec<_>>();
+                for row in rows {
+                    for (i, val) in row.iter().enumerate() {
+                        let val_len = val.to_string().len();
+                        if val_len > max_len[i] {
+                            max_len[i] = val_len;
+                        }
+                    }
+                }
+                // 展示列
+                let columns = columns
+                    .iter()
+                    .zip(max_len.iter())
+                    .map(|(col, len)| format!("{:width$}", col, width = len))
+                    .collect::<Vec<_>>()
+                    .join(" |");
+                // 展示分割符
+                let separator = max_len
+                    .iter()
+                    .map(|len| "-".repeat(*len + 1))
+                    .collect::<Vec<_>>()
+                    .join("+");
+                // 展示行
                 let rows = rows
                     .iter()
                     .map(|row| {
                         row.iter()
-                            .map(|v| v.to_string())
+                            .zip(max_len.iter())
+                            .map(|(val, len)| format!("{:width$}", val.to_string(), width = len))
                             .collect::<Vec<_>>()
-                            .join(" | ")
+                            .join(" |")
                     })
                     .collect::<Vec<_>>()
                     .join("\n");
-                format!("{}\n{}\n{} ROWS", columns, rows, rows_len)
+                format!("{}\n{}\n{}\n{} ROWS", columns, separator, rows, row_len)
             }
             ResultSet::Update { count } => format!("UPDATE {} ROWS", count),
             ResultSet::Delete { count } => format!("DELETE {} ROWS", count),
