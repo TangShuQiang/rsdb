@@ -168,6 +168,17 @@ impl<E: StorageEngine> Transaction for KVTransaction<E> {
             .map(|v| bincode::deserialize(&v))
             .transpose()?)
     }
+
+    fn get_table_names(&self) -> RSDBResult<Vec<String>> {
+        let prefix = KeyPrefix::Table.encode()?;
+        let results = self.txn.scan_prefix(prefix)?;
+        let mut names = Vec::new();
+        for result in results {
+            let table: Table = bincode::deserialize(&result.value)?;
+            names.push(table.name);
+        }
+        Ok(names)
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]

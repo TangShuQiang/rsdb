@@ -1,4 +1,4 @@
-use std::default;
+use std::fmt::Display;
 
 use serde::{Deserialize, Serialize};
 
@@ -86,6 +86,18 @@ impl Table {
     }
 }
 
+impl Display for Table {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let col_desc = self
+            .columns
+            .iter()
+            .map(|col| format!("{}", col))
+            .collect::<Vec<_>>()
+            .join(",\n");
+        write!(f, "CREATE TABLE {} (\n{}\n)", self.name, col_desc)
+    }
+}
+
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct Column {
     pub name: String,
@@ -93,4 +105,20 @@ pub struct Column {
     pub nullable: bool,
     pub default: Option<Value>,
     pub primary_key: bool,
+}
+
+impl Display for Column {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut col_desc = format!("    {} {:?}", self.name, self.datatype);
+        if self.primary_key {
+            col_desc += " PRIMARY KEY";
+        }
+        if !self.nullable && !self.primary_key {
+            col_desc += " NOT NULL";
+        }
+        if let Some(v) = &self.default {
+            col_desc += &format!(" DEFAULT {}", v.to_string());
+        }
+        write!(f, "{}", col_desc)
+    }
 }

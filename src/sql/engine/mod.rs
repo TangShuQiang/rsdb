@@ -43,6 +43,8 @@ pub trait Transaction {
 
     // DDL 相关操作
     fn create_table(&self, table: Table) -> RSDBResult<()>;
+    // 获取所有的表名
+    fn get_table_names(&self) -> RSDBResult<Vec<String>>;
     // 获取表信息
     fn get_table(&self, table_name: String) -> RSDBResult<Option<Table>>;
     // 获取表信息，若不存在则报错
@@ -79,5 +81,19 @@ impl<E: Engine + 'static> Session<E> {
                 }
             }
         }
+    }
+
+    pub fn get_table(&self, table_name: String) -> RSDBResult<String> {
+        let txn = self.engin.begin()?;
+        let table = txn.must_get_table(table_name)?;
+        txn.commit()?;
+        Ok(table.to_string())
+    }
+
+    pub fn get_table_names(&self) -> RSDBResult<String> {
+        let txn = self.engin.begin()?;
+        let names = txn.get_table_names()?;
+        txn.commit()?;
+        Ok(names.join("\n"))
     }
 }
