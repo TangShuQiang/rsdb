@@ -73,6 +73,11 @@ impl<E: Engine> MvccTransaction<E> {
         })
     }
 
+    // 获取版本号
+    pub fn version(&self) -> u64 {
+        self.state.version
+    }
+
     pub fn commit(&self) -> RSDBResult<()> {
         let mut engine = self.engine.lock()?;
         let mut txnwrite_keys = Vec::new();

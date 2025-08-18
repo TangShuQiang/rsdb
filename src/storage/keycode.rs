@@ -44,15 +44,15 @@ impl<'a> ser::Serializer for &'a mut Serializer {
         Ok(())
     }
 
-    fn serialize_i8(self, v: i8) -> RSDBResult<()> {
+    fn serialize_i8(self, _v: i8) -> RSDBResult<()> {
         todo!()
     }
 
-    fn serialize_i16(self, v: i16) -> RSDBResult<()> {
+    fn serialize_i16(self, _v: i16) -> RSDBResult<()> {
         todo!()
     }
 
-    fn serialize_i32(self, v: i32) -> RSDBResult<()> {
+    fn serialize_i32(self, _v: i32) -> RSDBResult<()> {
         todo!()
     }
 
@@ -61,15 +61,15 @@ impl<'a> ser::Serializer for &'a mut Serializer {
         Ok(())
     }
 
-    fn serialize_u8(self, v: u8) -> RSDBResult<()> {
+    fn serialize_u8(self, _v: u8) -> RSDBResult<()> {
         todo!()
     }
 
-    fn serialize_u16(self, v: u16) -> RSDBResult<()> {
+    fn serialize_u16(self, _v: u16) -> RSDBResult<()> {
         todo!()
     }
 
-    fn serialize_u32(self, v: u32) -> RSDBResult<()> {
+    fn serialize_u32(self, _v: u32) -> RSDBResult<()> {
         todo!()
     }
 
@@ -78,15 +78,15 @@ impl<'a> ser::Serializer for &'a mut Serializer {
         Ok(())
     }
 
-    fn serialize_f32(self, v: f32) -> RSDBResult<()> {
+    fn serialize_f32(self, _v: f32) -> RSDBResult<()> {
         todo!()
     }
 
-    fn serialize_f64(self, v: f64) -> RSDBResult<()> {
+    fn serialize_f64(self, _v: f64) -> RSDBResult<()> {
         todo!()
     }
 
-    fn serialize_char(self, v: char) -> RSDBResult<()> {
+    fn serialize_char(self, _v: char) -> RSDBResult<()> {
         todo!()
     }
 
@@ -118,7 +118,7 @@ impl<'a> ser::Serializer for &'a mut Serializer {
         todo!()
     }
 
-    fn serialize_some<T>(self, value: &T) -> RSDBResult<()>
+    fn serialize_some<T>(self, _value: &T) -> RSDBResult<()>
     where
         T: ?Sized + ser::Serialize,
     {
@@ -129,22 +129,22 @@ impl<'a> ser::Serializer for &'a mut Serializer {
         todo!()
     }
 
-    fn serialize_unit_struct(self, name: &'static str) -> RSDBResult<()> {
+    fn serialize_unit_struct(self, _name: &'static str) -> RSDBResult<()> {
         todo!()
     }
 
     // 类似 MvccKey::NextVersion
     fn serialize_unit_variant(
         self,
-        name: &'static str,
+        _name: &'static str,
         variant_index: u32,
-        variant: &'static str,
+        _variant: &'static str,
     ) -> RSDBResult<()> {
         self.output.extend(u8::try_from(variant_index));
         Ok(())
     }
 
-    fn serialize_newtype_struct<T>(self, name: &'static str, value: &T) -> RSDBResult<()>
+    fn serialize_newtype_struct<T>(self, _name: &'static str, _value: &T) -> RSDBResult<()>
     where
         T: ?Sized + ser::Serialize,
     {
@@ -166,18 +166,18 @@ impl<'a> ser::Serializer for &'a mut Serializer {
         value.serialize(self)
     }
 
-    fn serialize_seq(self, len: Option<usize>) -> RSDBResult<Self::SerializeSeq> {
+    fn serialize_seq(self, _len: Option<usize>) -> RSDBResult<Self::SerializeSeq> {
         Ok(self)
     }
 
-    fn serialize_tuple(self, len: usize) -> RSDBResult<Self::SerializeTuple> {
+    fn serialize_tuple(self, _len: usize) -> RSDBResult<Self::SerializeTuple> {
         Ok(self)
     }
 
     fn serialize_tuple_struct(
         self,
-        name: &'static str,
-        len: usize,
+        _name: &'static str,
+        _len: usize,
     ) -> RSDBResult<Self::SerializeTupleStruct> {
         todo!()
     }
@@ -188,26 +188,30 @@ impl<'a> ser::Serializer for &'a mut Serializer {
         name: &'static str,
         variant_index: u32,
         variant: &'static str,
-        len: usize,
+        _len: usize,
     ) -> RSDBResult<Self::SerializeTupleVariant> {
         self.serialize_unit_variant(name, variant_index, variant)?;
         Ok(self)
     }
 
-    fn serialize_map(self, len: Option<usize>) -> RSDBResult<Self::SerializeMap> {
+    fn serialize_map(self, _len: Option<usize>) -> RSDBResult<Self::SerializeMap> {
         todo!()
     }
 
-    fn serialize_struct(self, name: &'static str, len: usize) -> RSDBResult<Self::SerializeStruct> {
+    fn serialize_struct(
+        self,
+        _name: &'static str,
+        _len: usize,
+    ) -> RSDBResult<Self::SerializeStruct> {
         todo!()
     }
 
     fn serialize_struct_variant(
         self,
-        name: &'static str,
-        variant_index: u32,
-        variant: &'static str,
-        len: usize,
+        _name: &'static str,
+        _variant_index: u32,
+        _variant: &'static str,
+        _len: usize,
     ) -> RSDBResult<Self::SerializeStructVariant> {
         todo!()
     }
@@ -299,7 +303,7 @@ impl<'de> Deserializer<'de> {
 impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     type Error = RSDBError;
 
-    fn deserialize_any<V>(self, visitor: V) -> RSDBResult<V::Value>
+    fn deserialize_any<V>(self, _visitor: V) -> RSDBResult<V::Value>
     where
         V: de::Visitor<'de>,
     {
@@ -316,21 +320,21 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
         visitor.visit_bool(v != 0)
     }
 
-    fn deserialize_i8<V>(self, visitor: V) -> RSDBResult<V::Value>
+    fn deserialize_i8<V>(self, _visitor: V) -> RSDBResult<V::Value>
     where
         V: de::Visitor<'de>,
     {
         todo!()
     }
 
-    fn deserialize_i16<V>(self, visitor: V) -> RSDBResult<V::Value>
+    fn deserialize_i16<V>(self, _visitor: V) -> RSDBResult<V::Value>
     where
         V: de::Visitor<'de>,
     {
         todo!()
     }
 
-    fn deserialize_i32<V>(self, visitor: V) -> RSDBResult<V::Value>
+    fn deserialize_i32<V>(self, _visitor: V) -> RSDBResult<V::Value>
     where
         V: de::Visitor<'de>,
     {
@@ -346,21 +350,21 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
         visitor.visit_i64(v)
     }
 
-    fn deserialize_u8<V>(self, visitor: V) -> RSDBResult<V::Value>
+    fn deserialize_u8<V>(self, _visitor: V) -> RSDBResult<V::Value>
     where
         V: de::Visitor<'de>,
     {
         todo!()
     }
 
-    fn deserialize_u16<V>(self, visitor: V) -> RSDBResult<V::Value>
+    fn deserialize_u16<V>(self, _visitor: V) -> RSDBResult<V::Value>
     where
         V: de::Visitor<'de>,
     {
         todo!()
     }
 
-    fn deserialize_u32<V>(self, visitor: V) -> RSDBResult<V::Value>
+    fn deserialize_u32<V>(self, _visitor: V) -> RSDBResult<V::Value>
     where
         V: de::Visitor<'de>,
     {
@@ -378,21 +382,21 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
         visitor.visit_u64(v)
     }
 
-    fn deserialize_f32<V>(self, visitor: V) -> RSDBResult<V::Value>
+    fn deserialize_f32<V>(self, _visitor: V) -> RSDBResult<V::Value>
     where
         V: de::Visitor<'de>,
     {
         todo!()
     }
 
-    fn deserialize_f64<V>(self, visitor: V) -> RSDBResult<V::Value>
+    fn deserialize_f64<V>(self, _visitor: V) -> RSDBResult<V::Value>
     where
         V: de::Visitor<'de>,
     {
         todo!()
     }
 
-    fn deserialize_char<V>(self, visitor: V) -> RSDBResult<V::Value>
+    fn deserialize_char<V>(self, _visitor: V) -> RSDBResult<V::Value>
     where
         V: de::Visitor<'de>,
     {
@@ -407,7 +411,7 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
         visitor.visit_str(&String::from_utf8(bytes)?)
     }
 
-    fn deserialize_string<V>(self, visitor: V) -> RSDBResult<V::Value>
+    fn deserialize_string<V>(self, _visitor: V) -> RSDBResult<V::Value>
     where
         V: de::Visitor<'de>,
     {
@@ -428,28 +432,28 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
         visitor.visit_byte_buf(self.next_bytes()?)
     }
 
-    fn deserialize_option<V>(self, visitor: V) -> RSDBResult<V::Value>
+    fn deserialize_option<V>(self, _visitor: V) -> RSDBResult<V::Value>
     where
         V: de::Visitor<'de>,
     {
         todo!()
     }
 
-    fn deserialize_unit<V>(self, visitor: V) -> RSDBResult<V::Value>
+    fn deserialize_unit<V>(self, _visitor: V) -> RSDBResult<V::Value>
     where
         V: de::Visitor<'de>,
     {
         todo!()
     }
 
-    fn deserialize_unit_struct<V>(self, name: &'static str, visitor: V) -> RSDBResult<V::Value>
+    fn deserialize_unit_struct<V>(self, _name: &'static str, _visitor: V) -> RSDBResult<V::Value>
     where
         V: de::Visitor<'de>,
     {
         todo!()
     }
 
-    fn deserialize_newtype_struct<V>(self, name: &'static str, visitor: V) -> RSDBResult<V::Value>
+    fn deserialize_newtype_struct<V>(self, _name: &'static str, _visitor: V) -> RSDBResult<V::Value>
     where
         V: de::Visitor<'de>,
     {
@@ -463,7 +467,7 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
         visitor.visit_seq(self)
     }
 
-    fn deserialize_tuple<V>(self, len: usize, visitor: V) -> RSDBResult<V::Value>
+    fn deserialize_tuple<V>(self, _len: usize, visitor: V) -> RSDBResult<V::Value>
     where
         V: de::Visitor<'de>,
     {
@@ -472,9 +476,9 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
 
     fn deserialize_tuple_struct<V>(
         self,
-        name: &'static str,
-        len: usize,
-        visitor: V,
+        _name: &'static str,
+        _len: usize,
+        _visitor: V,
     ) -> RSDBResult<V::Value>
     where
         V: de::Visitor<'de>,
@@ -482,7 +486,7 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
         todo!()
     }
 
-    fn deserialize_map<V>(self, visitor: V) -> RSDBResult<V::Value>
+    fn deserialize_map<V>(self, _visitor: V) -> RSDBResult<V::Value>
     where
         V: de::Visitor<'de>,
     {
@@ -491,9 +495,9 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
 
     fn deserialize_struct<V>(
         self,
-        name: &'static str,
-        fields: &'static [&'static str],
-        visitor: V,
+        _name: &'static str,
+        _fields: &'static [&'static str],
+        _visitor: V,
     ) -> RSDBResult<V::Value>
     where
         V: de::Visitor<'de>,
@@ -503,8 +507,8 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
 
     fn deserialize_enum<V>(
         self,
-        name: &'static str,
-        variants: &'static [&'static str],
+        _name: &'static str,
+        _variants: &'static [&'static str],
         visitor: V,
     ) -> RSDBResult<V::Value>
     where
@@ -513,14 +517,14 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
         visitor.visit_enum(self)
     }
 
-    fn deserialize_identifier<V>(self, visitor: V) -> RSDBResult<V::Value>
+    fn deserialize_identifier<V>(self, _visitor: V) -> RSDBResult<V::Value>
     where
         V: de::Visitor<'de>,
     {
         todo!()
     }
 
-    fn deserialize_ignored_any<V>(self, visitor: V) -> RSDBResult<V::Value>
+    fn deserialize_ignored_any<V>(self, _visitor: V) -> RSDBResult<V::Value>
     where
         V: de::Visitor<'de>,
     {
@@ -568,14 +572,18 @@ impl<'de, 'a> de::VariantAccess<'de> for &mut Deserializer<'de> {
         seed.deserialize(&mut *self)
     }
 
-    fn tuple_variant<V>(self, len: usize, visitor: V) -> RSDBResult<V::Value>
+    fn tuple_variant<V>(self, _len: usize, visitor: V) -> RSDBResult<V::Value>
     where
         V: de::Visitor<'de>,
     {
         visitor.visit_seq(self)
     }
 
-    fn struct_variant<V>(self, fields: &'static [&'static str], visitor: V) -> RSDBResult<V::Value>
+    fn struct_variant<V>(
+        self,
+        _fields: &'static [&'static str],
+        _visitor: V,
+    ) -> RSDBResult<V::Value>
     where
         V: de::Visitor<'de>,
     {

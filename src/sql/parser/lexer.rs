@@ -86,6 +86,9 @@ pub enum Keyword {
     On,
     Group,
     Having,
+    Begin,
+    Commit,
+    Rollback,
 }
 
 impl Keyword {
@@ -133,6 +136,9 @@ impl Keyword {
             "ON" => Keyword::On,
             "GROUP" => Keyword::Group,
             "HAVING" => Keyword::Having,
+            "BEGIN" => Keyword::Begin,
+            "COMMIT" => Keyword::Commit,
+            "ROLLBACK" => Keyword::Rollback,
             _ => return None,
         })
     }
@@ -180,6 +186,9 @@ impl Keyword {
             Keyword::On => "ON",
             Keyword::Group => "GROUP",
             Keyword::Having => "HAVING",
+            Keyword::Begin => "BEGIN",
+            Keyword::Commit => "COMMIT",
+            Keyword::Rollback => "ROLLBACK",
         }
     }
 }

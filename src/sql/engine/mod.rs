@@ -2,7 +2,10 @@ use crate::{
     error::{RSDBError, RSDBResult},
     sql::{
         executor::ResultSet,
-        parser::{Parser, ast::Expression},
+        parser::{
+            Parser,
+            ast::{self, Expression},
+        },
         plan::Plan,
         schema::Table,
         types::{Row, Value},
@@ -20,6 +23,7 @@ pub trait Engine: Clone {
     fn session(&self) -> RSDBResult<Session<Self>> {
         Ok(Session {
             engin: self.clone(),
+            txn: None,
         })
     }
 }
@@ -31,6 +35,8 @@ pub trait Transaction {
     fn commit(&self) -> RSDBResult<()>;
     // 回滚事务
     fn rollback(&self) -> RSDBResult<()>;
+    // 版本号
+    fn version(&self) -> u64;
 
     // 创建行
     fn create_row(&self, table: &Table, row: Row) -> RSDBResult<()>;
@@ -60,12 +66,38 @@ pub trait Transaction {
 // 客户端 session 定义
 pub struct Session<E: Engine> {
     engin: E,
+    txn: Option<E::Transaction>,
 }
 
 impl<E: Engine + 'static> Session<E> {
     // 执行客户端 SQL 语句
-    pub fn execute(&self, sql: &str) -> RSDBResult<ResultSet> {
+    pub fn execute(&mut self, sql: &str) -> RSDBResult<ResultSet> {
         match Parser::new(sql).parse()? {
+            ast::Statement::Begin if self.txn.is_some() => {
+                Err(RSDBError::Internal("Already in transaction".to_string()))
+            }
+            ast::Statement::Commit | ast::Statement::Rollback if self.txn.is_none() => {
+                Err(RSDBError::Internal("Not in transaction".to_string()))
+            }
+            ast::Statement::Begin => {
+                let txn = self.engin.begin()?;
+                let version = txn.version();
+                self.txn = Some(txn);
+                Ok(ResultSet::Begin { version })
+            }
+            ast::Statement::Commit => {
+                let txn = self.txn.take().unwrap();
+                let version = txn.version();
+                txn.commit()?;
+                Ok(ResultSet::Commit { version })
+            }
+            ast::Statement::Rollback => {
+                let txn = self.txn.take().unwrap();
+                let version = txn.version();
+                txn.rollback()?;
+                Ok(ResultSet::Rollback { version })
+            }
+            stmt if self.txn.is_some() => Plan::build(stmt)?.execute(self.txn.as_mut().unwrap()),
             stmt => {
                 let mut txn = self.engin.begin()?;
                 // 构建 plan，执行 SQL 语句
@@ -84,16 +116,28 @@ impl<E: Engine + 'static> Session<E> {
     }
 
     pub fn get_table(&self, table_name: String) -> RSDBResult<String> {
-        let txn = self.engin.begin()?;
-        let table = txn.must_get_table(table_name)?;
-        txn.commit()?;
+        let table = match self.txn.as_ref() {
+            Some(txn) => txn.must_get_table(table_name)?,
+            None => {
+                let txn = self.engin.begin()?;
+                let table = txn.must_get_table(table_name)?;
+                txn.commit()?;
+                table
+            }
+        };
         Ok(table.to_string())
     }
 
     pub fn get_table_names(&self) -> RSDBResult<String> {
-        let txn = self.engin.begin()?;
-        let names = txn.get_table_names()?;
-        txn.commit()?;
+        let names = match self.txn.as_ref() {
+            Some(txn) => txn.get_table_names()?,
+            None => {
+                let txn = self.engin.begin()?;
+                let names = txn.get_table_names()?;
+                txn.commit()?;
+                names
+            }
+        };
         Ok(names.join("\n"))
     }
 }

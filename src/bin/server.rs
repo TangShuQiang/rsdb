@@ -23,17 +23,17 @@ enum SqlRequest {
 
 impl SqlRequest {
     pub fn parse(cmd: &str) -> Self {
-        let cmd = cmd.to_uppercase();
-        if cmd == "SHOW TABLES" {
+        let upper_cmd = cmd.to_uppercase();
+        if upper_cmd == "SHOW TABLES" {
             return SqlRequest::ListTables;
         }
-        if cmd.starts_with("SHOW TABLE") {
+        if upper_cmd.starts_with("SHOW TABLE") {
             let args = cmd.split_ascii_whitespace().collect::<Vec<_>>();
             if args.len() == 3 {
                 return SqlRequest::TableInfo(args[2].to_lowercase());
             }
         }
-        SqlRequest::SQL(cmd)
+        SqlRequest::SQL(cmd.into())
     }
 }
 

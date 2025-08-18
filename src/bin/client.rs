@@ -11,12 +11,16 @@ const RESPONSE_END: &str = "!!!end!!!";
 
 pub struct Client {
     stream: TcpStream,
+    txn_version: Option<u64>,
 }
 
 impl Client {
     pub async fn new(addr: SocketAddr) -> Result<Self, Box<dyn Error>> {
         let stream = TcpStream::connect(addr).await?;
-        Ok(Self { stream })
+        Ok(Self {
+            stream,
+            txn_version: None,
+        })
     }
 
     pub async fn execute_sql(&mut self, sql_cmd: &str) -> Result<(), Box<dyn Error>> {
@@ -32,9 +36,27 @@ impl Client {
             if val == RESPONSE_END {
                 break;
             }
+            // 解析事务命令
+            if val.starts_with("TRANSACTION") {
+                let args = val.split(" ").collect::<Vec<_>>();
+                if args[2] == "COMMIT" || args[2] == "ROLLBACK" {
+                    self.txn_version = None;
+                } else if args[2] == "BEGIN" {
+                    let version = args[1].parse::<u64>().unwrap();
+                    self.txn_version = Some(version);
+                }
+            }
             println!("{}", val);
         }
         Ok(())
+    }
+}
+
+impl Drop for Client {
+    fn drop(&mut self) {
+        if self.txn_version.is_some() {
+            futures::executor::block_on(self.execute_sql("ROLLBACK")).expect("rollback failed");
+        }
     }
 }
 
@@ -48,7 +70,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let mut editor = DefaultEditor::new()?;
     loop {
-        let readline = editor.readline("rsdb> ");
+        let prompt = match client.txn_version {
+            Some(version) => format!("rsdb#{}> ", version),
+            None => "rsdb> ".to_string(),
+        };
+        let readline = editor.readline(&prompt);
         match readline {
             Ok(sql_cmd) => {
                 let sql_cmd = sql_cmd.trim();

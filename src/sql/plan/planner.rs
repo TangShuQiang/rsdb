@@ -166,6 +166,11 @@ impl Planner {
                     filter: where_clause,
                 }),
             },
+            ast::Statement::Begin | ast::Statement::Commit | ast::Statement::Rollback => {
+                return Err(RSDBError::Internal(
+                    "transaction statements are not supported in planner".to_string(),
+                ));
+            }
         };
         Ok(node)
     }

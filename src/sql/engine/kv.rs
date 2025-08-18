@@ -60,6 +60,10 @@ impl<E: StorageEngine> Transaction for KVTransaction<E> {
         self.txn.rollback()
     }
 
+    fn version(&self) -> u64 {
+        self.txn.version()
+    }
+
     fn create_row(&self, table: &Table, row: Row) -> RSDBResult<()> {
         // 校验行的有效性
         for (i, col) in table.columns.iter().enumerate() {
@@ -559,7 +563,7 @@ mod tests {
     fn test_cross_join() -> RSDBResult<()> {
         let p = tempfile::tempdir()?.keep().join("rsdb-log");
         let kvengine = KVEngine::new(DiskEngine::new(p.clone())?);
-        let s = kvengine.session()?;
+        let mut s = kvengine.session()?;
         s.execute("create table t1 (a int primary key);")?;
         s.execute("create table t2 (b int primary key);")?;
         s.execute("create table t3 (c int primary key);")?;
@@ -587,7 +591,7 @@ mod tests {
     fn test_join() -> RSDBResult<()> {
         let p = tempfile::tempdir()?.keep().join("rsdb-log");
         let kvengine = KVEngine::new(DiskEngine::new(p.clone())?);
-        let s = kvengine.session()?;
+        let mut s = kvengine.session()?;
         s.execute("create table t1 (a int primary key);")?;
         s.execute("create table t2 (b int primary key);")?;
         s.execute("create table t3 (c int primary key);")?;
@@ -615,7 +619,7 @@ mod tests {
     fn test_agg() -> RSDBResult<()> {
         let p = tempfile::tempdir()?.keep().join("rsdb-log");
         let kvengine = KVEngine::new(DiskEngine::new(p.clone())?);
-        let s = kvengine.session()?;
+        let mut s = kvengine.session()?;
         s.execute("create table t1 (a int primary key, b text, c float);")?;
 
         s.execute("insert into t1 values (1, 'aa', 3.1);")?;
@@ -674,7 +678,7 @@ mod tests {
     fn test_group_by() -> RSDBResult<()> {
         let p = tempfile::tempdir()?.keep().join("rsdb-log");
         let kvengine = KVEngine::new(DiskEngine::new(p.clone())?);
-        let s = kvengine.session()?;
+        let mut s = kvengine.session()?;
         s.execute("create table t1 (a int primary key, b text, c float);")?;
 
         s.execute("insert into t1 values (1, 'aa', 3.1);")?;
@@ -730,7 +734,7 @@ mod tests {
     fn test_filter() -> RSDBResult<()> {
         let p = tempfile::tempdir()?.keep().join("rsdb-log");
         let kvengine = KVEngine::new(DiskEngine::new(p.clone())?);
-        let s = kvengine.session()?;
+        let mut s = kvengine.session()?;
         s.execute("create table t1 (a int primary key, b text, c float, d bool);")?;
 
         s.execute("insert into t1 values (1, 'aa', 3.1, true);")?;
