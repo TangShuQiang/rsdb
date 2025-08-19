@@ -149,7 +149,11 @@ impl<T: Transaction> Executor<T> for Update<T> {
                     count += 1;
                 }
             }
-            _ => return Err(RSDBError::Internal("Update source must be a Scan".to_string())),
+            _ => {
+                return Err(RSDBError::Internal(
+                    "Update source must be a Scan".to_string(),
+                ));
+            }
         }
         Ok(ResultSet::Update { count })
     }
@@ -170,7 +174,7 @@ impl<T: Transaction> Executor<T> for Delete<T> {
     fn execute(self: Box<Self>, txn: &mut T) -> RSDBResult<ResultSet> {
         let mut count = 0;
         match self.source.execute(txn)? {
-            ResultSet::Scan { columns, rows } => {
+            ResultSet::Scan { columns: _, rows } => {
                 let table = txn.must_get_table(self.table_name)?;
                 for row in rows {
                     let pk = table.get_primary_key(&row)?;
@@ -179,7 +183,11 @@ impl<T: Transaction> Executor<T> for Delete<T> {
                 }
                 Ok(ResultSet::Delete { count })
             }
-            _ => return Err(RSDBError::Internal("Delete source must be a Scan".to_string())),
+            _ => {
+                return Err(RSDBError::Internal(
+                    "Delete source must be a Scan".to_string(),
+                ));
+            }
         }
     }
 }
