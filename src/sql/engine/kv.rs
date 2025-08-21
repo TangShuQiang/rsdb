@@ -237,9 +237,7 @@ impl<E: StorageEngine> Transaction for KVTransaction<E> {
         }
         Ok(names)
     }
-}
 
-impl<E: StorageEngine> KVTransaction<E> {
     fn load_index(
         &self,
         table_name: &str,
@@ -864,6 +862,32 @@ mod tests {
             ResultSet::Scan { columns, rows } => {
                 assert_eq!(2, columns.len());
                 assert_eq!(3, rows.len());
+            }
+            _ => unreachable!(),
+        }
+
+        std::fs::remove_dir_all(p.parent().unwrap())?;
+        Ok(())
+    }
+
+    #[test]
+    fn test_index() -> RSDBResult<()> {
+        let p = tempfile::tempdir()?.keep().join("sqldb-log");
+        let kvengine = KVEngine::new(DiskEngine::new(p.clone())?);
+        let mut s = kvengine.session()?;
+        s.execute("create table t (a int primary key, b text index, c float index, d bool);")?;
+        s.execute("insert into t values (1, 'a', 1.1, true);")?;
+        s.execute("insert into t values (2, 'b', 2.1, true);")?;
+        s.execute("insert into t values (3, 'a', 3.2, false);")?;
+        s.execute("insert into t values (4, 'c', 1.1, true);")?;
+        s.execute("insert into t values (5, 'd', 2.1, false);")?;
+
+        s.execute("delete from t where a = 4;")?;
+
+        match s.execute("select * from t where c = 1.1;")? {
+            ResultSet::Scan { columns, rows } => {
+                assert_eq!(columns.len(), 4);
+                assert_eq!(rows.len(), 1);
             }
             _ => unreachable!(),
         }

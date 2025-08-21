@@ -89,6 +89,7 @@ pub enum Keyword {
     Begin,
     Commit,
     Rollback,
+    Index,
 }
 
 impl Keyword {
@@ -139,6 +140,7 @@ impl Keyword {
             "BEGIN" => Keyword::Begin,
             "COMMIT" => Keyword::Commit,
             "ROLLBACK" => Keyword::Rollback,
+            "INDEX" => Keyword::Index,
             _ => return None,
         })
     }
@@ -189,6 +191,7 @@ impl Keyword {
             Keyword::Begin => "BEGIN",
             Keyword::Commit => "COMMIT",
             Keyword::Rollback => "ROLLBACK",
+            Keyword::Index => "INDEX",
         }
     }
 }

@@ -2,6 +2,7 @@ use std::{collections::BTreeMap, iter::Peekable};
 
 use ast::Column;
 use lexer::{Keyword, Lexer, Token};
+use tokio_util::time::delay_queue::Key;
 
 use super::types::DataType;
 use crate::{
@@ -418,6 +419,7 @@ impl<'a> Parser<'a> {
             nullable: None,
             default: None,
             primary_key: false,
+            index: false,
         };
         // 解析列的默认值，以及是否可以为空
         while let Some(Token::Keyword(keyword)) = self.next_if_keyword() {
@@ -432,6 +434,7 @@ impl<'a> Parser<'a> {
                     self.next_expect(Token::Keyword(Keyword::Key))?;
                     column.primary_key = true;
                 }
+                Keyword::Index => column.index = true,
                 k => {
                     return Err(RSDBError::Parse(format!(
                         "[Parse] Unexpected keyword {}",

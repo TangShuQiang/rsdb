@@ -6,7 +6,7 @@ use crate::{
             agg::Aggregate,
             join::NestLoopJoin,
             mutation::{Delete, Insert, Update},
-            query::{Filter, Limit, Offset, Order, Projection, Scan},
+            query::{Filter, IndexScan, Limit, Offset, Order, Projection, Scan},
             schema::CreateTable,
         },
         plan::Node,
@@ -57,6 +57,11 @@ impl<T: Transaction + 'static> dyn Executor<T> {
                 group_by,
             } => Aggregate::new(Self::build(*source), exprs, group_by),
             Node::Filter { source, predicate } => Filter::new(Self::build(*source), predicate),
+            Node::IndexScan {
+                table_name,
+                field,
+                value,
+            } => IndexScan::new(table_name, field, value),
         }
     }
 }

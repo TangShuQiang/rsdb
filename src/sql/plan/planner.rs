@@ -1,18 +1,21 @@
 use crate::{
     error::{RSDBError, RSDBResult},
     sql::{
-        parser::ast,
+        engine::Transaction,
+        parser::ast::{self, Expression},
         plan::{Node, Plan},
         schema::{self, Table},
         types::Value,
     },
 };
 
-pub struct Planner;
+pub struct Planner<'a, T: Transaction> {
+    txn: &'a mut T,
+}
 
-impl Planner {
-    pub fn new() -> Self {
-        Self {}
+impl<'a, T: Transaction> Planner<'a, T> {
+    pub fn new(txn: &'a mut T) -> Self {
+        Self { txn }
     }
 
     pub fn build(&mut self, stmt: ast::Statement) -> RSDBResult<Plan> {
@@ -39,7 +42,7 @@ impl Planner {
                                 nullable,
                                 default,
                                 primary_key: c.primary_key,
-                                index: true,
+                                index: c.index && !c.primary_key,
                             }
                         })
                         .collect(),
@@ -65,14 +68,7 @@ impl Planner {
                 offset,
             } => {
                 // from
-                let mut node = self.build_from_item(from)?;
-                // where
-                if let Some(expr) = where_clause {
-                    node = Node::Filter {
-                        source: Box::new(node),
-                        predicate: expr,
-                    }
-                }
+                let mut node = self.build_from_item(from, &where_clause)?;
                 // aggregate, group by
                 let mut has_agg = false;
                 if !select.is_empty() {
@@ -151,10 +147,7 @@ impl Planner {
                 where_clause,
             } => Node::Update {
                 table_name: table_name.clone(),
-                source: Box::new(Node::Scan {
-                    table_name,
-                    filter: where_clause,
-                }),
+                source: Box::new(self.build_scan(table_name.clone(), where_clause)?),
                 columns: columns.into_iter().collect(),
             },
             ast::Statement::Delete {
@@ -162,10 +155,7 @@ impl Planner {
                 where_clause,
             } => Node::Delete {
                 table_name: table_name.clone(),
-                source: Box::new(Node::Scan {
-                    table_name,
-                    filter: where_clause,
-                }),
+                source: Box::new(self.build_scan(table_name.clone(), where_clause)?),
             },
             ast::Statement::Begin | ast::Statement::Commit | ast::Statement::Rollback => {
                 return Err(RSDBError::Internal(
@@ -176,12 +166,13 @@ impl Planner {
         Ok(node)
     }
 
-    fn build_from_item(&self, item: ast::FromItem) -> RSDBResult<Node> {
+    fn build_from_item(
+        &self,
+        item: ast::FromItem,
+        filter: &Option<Expression>,
+    ) -> RSDBResult<Node> {
         let node = match item {
-            ast::FromItem::Table { name } => Node::Scan {
-                table_name: name,
-                filter: None,
-            },
+            ast::FromItem::Table { name } => self.build_scan(name, filter.clone())?,
             ast::FromItem::Join {
                 left,
                 right,
@@ -197,13 +188,57 @@ impl Planner {
                     _ => true,
                 };
                 Node::NestLoopJoin {
-                    left: Box::new(self.build_from_item(*left)?),
-                    right: Box::new(self.build_from_item(*right)?),
+                    left: Box::new(self.build_from_item(*left, filter)?),
+                    right: Box::new(self.build_from_item(*right, filter)?),
                     predicate,
                     outer,
                 }
             }
         };
         Ok(node)
+    }
+
+    fn build_scan(&self, table_name: String, filter: Option<Expression>) -> RSDBResult<Node> {
+        let node = match Self::parse_scan_filter(filter.clone()) {
+            Some((field, value)) => {
+                let table = self.txn.must_get_table(table_name.clone())?;
+                match table
+                    .columns
+                    .iter()
+                    .position(|c| c.name == field && c.index)
+                {
+                    Some(_) => Node::IndexScan {
+                        table_name,
+                        field,
+                        value,
+                    },
+                    None => Node::Scan { table_name, filter },
+                }
+            }
+            None => Node::Scan { table_name, filter },
+        };
+        Ok(node)
+    }
+
+    fn parse_scan_filter(filter: Option<Expression>) -> Option<(String, Value)> {
+        match filter {
+            Some(expr) => match expr {
+                Expression::Field(f) => Some((f, Value::Null)),
+                Expression::Consts(c) => Some((
+                    "".to_string(),
+                    Value::from_expression(Expression::Consts(c)),
+                )),
+                Expression::Operation(operation) => match operation {
+                    ast::Operation::Equal(l, r) => {
+                        let lv = Self::parse_scan_filter(Some(*l));
+                        let rv = Self::parse_scan_filter(Some(*r));
+                        Some((lv.unwrap().0, rv.unwrap().1))
+                    }
+                    _ => None,
+                },
+                _ => None,
+            },
+            None => None,
+        }
     }
 }

@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use crate::{
     error::{RSDBError, RSDBResult},
     sql::{
@@ -46,6 +48,24 @@ pub trait Transaction {
     fn delete_row(&self, table: &Table, pk: &Value) -> RSDBResult<()>;
     // 扫描表
     fn scan_table(&self, table: &Table, filter: Option<Expression>) -> RSDBResult<Vec<Row>>;
+
+    // 获取索引
+    fn load_index(
+        &self,
+        table_name: &str,
+        col_name: &str,
+        col_value: &Value,
+    ) -> RSDBResult<HashSet<Value>>;
+    // 保存索引
+    fn save_index(
+        &self,
+        table_name: &str,
+        col_name: &str,
+        col_value: &Value,
+        index: HashSet<Value>,
+    ) -> RSDBResult<()>;
+    // 根据主键获取行
+    fn read_by_pk(&self, table_name: &str, pk: &Value) -> RSDBResult<Option<Row>>;
 
     // DDL 相关操作
     fn create_table(&self, table: Table) -> RSDBResult<()>;
@@ -97,11 +117,13 @@ impl<E: Engine + 'static> Session<E> {
                 txn.rollback()?;
                 Ok(ResultSet::Rollback { version })
             }
-            stmt if self.txn.is_some() => Plan::build(stmt)?.execute(self.txn.as_mut().unwrap()),
+            stmt if self.txn.is_some() => {
+                Plan::build(stmt, self.txn.as_mut().unwrap())?.execute(self.txn.as_mut().unwrap())
+            }
             stmt => {
                 let mut txn = self.engin.begin()?;
                 // 构建 plan，执行 SQL 语句
-                match Plan::build(stmt)?.execute(&mut txn) {
+                match Plan::build(stmt, &mut txn)?.execute(&mut txn) {
                     Ok(result) => {
                         txn.commit()?;
                         Ok(result)

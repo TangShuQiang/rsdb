@@ -8,6 +8,7 @@ use crate::{
         parser::ast::{self, Expression, OrderDirection},
         plan::planner::Planner,
         schema::Table,
+        types::Value,
     },
 };
 
@@ -91,6 +92,13 @@ pub enum Node {
         source: Box<Node>,
         predicate: Expression,
     },
+
+    // 索引查询节点
+    IndexScan {
+        table_name: String,
+        field: String,
+        value: Value,
+    },
 }
 
 // 执行计划定义，底层是不同类型执行节点
@@ -98,8 +106,8 @@ pub enum Node {
 pub struct Plan(pub Node);
 
 impl Plan {
-    pub fn build(stmt: ast::Statement) -> RSDBResult<Self> {
-        Ok(Planner::new().build(stmt)?)
+    pub fn build<T: Transaction>(stmt: ast::Statement, txn: &mut T) -> RSDBResult<Self> {
+        Ok(Planner::new(txn).build(stmt)?)
     }
 
     pub fn execute<T: Transaction + 'static>(self, txn: &mut T) -> RSDBResult<ResultSet> {
@@ -112,16 +120,22 @@ mod tests {
     use crate::{
         error::RSDBResult,
         sql::{
+            engine::{Engine, kv::KVEngine},
             parser::{
                 Parser,
                 ast::{self, Expression},
             },
             plan::{Node, Plan},
         },
+        storage::disk::DiskEngine,
     };
 
     #[test]
     fn test_plan_create_table() -> RSDBResult<()> {
+        let p = tempfile::tempdir()?.keep().join("rsdb-log");
+        let kvengine = KVEngine::new(DiskEngine::new(p.clone())?);
+        let mut txn = kvengine.begin()?;
+
         let sql1 = "
         create table tbl1 (
             a int default 100,
@@ -131,7 +145,7 @@ mod tests {
         );
         ";
         let stmt1 = Parser::new(sql1).parse()?;
-        let p1 = Plan::build(stmt1);
+        let p1 = Plan::build(stmt1, &mut txn);
 
         let sql2 = "
         create            table tbl1 (
@@ -142,17 +156,21 @@ mod tests {
         );
         ";
         let stmt2 = Parser::new(sql2).parse()?;
-        let p2 = Plan::build(stmt2);
+        let p2 = Plan::build(stmt2, &mut txn);
         assert_eq!(p1, p2);
-
+        std::fs::remove_dir_all(p.parent().unwrap())?;
         Ok(())
     }
 
     #[test]
     fn test_plan_insert() -> RSDBResult<()> {
+        let p = tempfile::tempdir()?.keep().join("rsdb-log");
+        let kvengine = KVEngine::new(DiskEngine::new(p.clone())?);
+        let mut txn = kvengine.begin()?;
+
         let sql1 = "insert into tbl1 values (1, 2, 3, 'a', true);";
         let stmt1 = Parser::new(sql1).parse()?;
-        let p1 = Plan::build(stmt1)?;
+        let p1 = Plan::build(stmt1, &mut txn)?;
         assert_eq!(
             p1,
             Plan(Node::Insert {
@@ -170,7 +188,7 @@ mod tests {
 
         let sql2 = "insert into tbl2 (c1, c2, c3) values (3, 'a', true),(4, 'b', false);";
         let stmt2 = Parser::new(sql2).parse()?;
-        let p2 = Plan::build(stmt2)?;
+        let p2 = Plan::build(stmt2, &mut txn)?;
         assert_eq!(
             p2,
             Plan(Node::Insert {
@@ -190,23 +208,27 @@ mod tests {
                 ],
             })
         );
-
+        std::fs::remove_dir_all(p.parent().unwrap())?;
         Ok(())
     }
 
     #[test]
     fn test_plan_select() -> RSDBResult<()> {
+        let p = tempfile::tempdir()?.keep().join("rsdb-log");
+        let kvengine = KVEngine::new(DiskEngine::new(p.clone())?);
+        let mut txn = kvengine.begin()?;
+
         let sql = "select * from tbl1;";
         let stmt = Parser::new(sql).parse()?;
-        let p = Plan::build(stmt)?;
+        let plan = Plan::build(stmt, &mut txn)?;
         assert_eq!(
-            p,
+            plan,
             Plan(Node::Scan {
                 table_name: "tbl1".to_string(),
                 filter: None,
             })
         );
-
+        std::fs::remove_dir_all(p.parent().unwrap())?;
         Ok(())
     }
 }

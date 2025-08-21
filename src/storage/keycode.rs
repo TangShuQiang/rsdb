@@ -82,8 +82,9 @@ impl<'a> ser::Serializer for &'a mut Serializer {
         todo!()
     }
 
-    fn serialize_f64(self, _v: f64) -> RSDBResult<()> {
-        todo!()
+    fn serialize_f64(self, v: f64) -> RSDBResult<()> {
+        self.output.extend(v.to_be_bytes());
+        Ok(())
     }
 
     fn serialize_char(self, _v: char) -> RSDBResult<()> {
@@ -389,11 +390,13 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
         todo!()
     }
 
-    fn deserialize_f64<V>(self, _visitor: V) -> RSDBResult<V::Value>
+    fn deserialize_f64<V>(self, visitor: V) -> RSDBResult<V::Value>
     where
         V: de::Visitor<'de>,
     {
-        todo!()
+        let bytes = self.take_bytes(8);
+        let v = f64::from_be_bytes(bytes.try_into()?);
+        visitor.visit_f64(v)
     }
 
     fn deserialize_char<V>(self, _visitor: V) -> RSDBResult<V::Value>
