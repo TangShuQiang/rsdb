@@ -6,7 +6,7 @@ use crate::{
             agg::Aggregate,
             join::NestLoopJoin,
             mutation::{Delete, Insert, Update},
-            query::{Filter, IndexScan, Limit, Offset, Order, Projection, Scan},
+            query::{Filter, IndexScan, Limit, Offset, Order, PrimaryKeyScan, Projection, Scan},
             schema::CreateTable,
         },
         plan::Node,
@@ -62,6 +62,7 @@ impl<T: Transaction + 'static> dyn Executor<T> {
                 field,
                 value,
             } => IndexScan::new(table_name, field, value),
+            Node::PrimaryKeyScan { table_name, value } => PrimaryKeyScan::new(table_name, value),
         }
     }
 }

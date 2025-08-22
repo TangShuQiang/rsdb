@@ -99,6 +99,12 @@ pub enum Node {
         field: String,
         value: Value,
     },
+
+    // 主键查询节点
+    PrimaryKeyScan {
+        table_name: String,
+        value: Value,
+    },
 }
 
 // 执行计划定义，底层是不同类型执行节点

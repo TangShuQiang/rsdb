@@ -289,3 +289,31 @@ impl<T: Transaction> Executor<T> for IndexScan {
         })
     }
 }
+
+pub struct PrimaryKeyScan {
+    table_name: String,
+    value: Value,
+}
+
+impl PrimaryKeyScan {
+    pub fn new(table_name: String, value: Value) -> Box<Self> {
+        Box::new(Self { table_name, value })
+    }
+}
+
+impl<T: Transaction> Executor<T> for PrimaryKeyScan {
+    fn execute(self: Box<Self>, txn: &mut T) -> RSDBResult<ResultSet> {
+        let table = txn.must_get_table(self.table_name.clone())?;
+        if let Some(row) = txn.read_by_pk(&self.table_name, &self.value)? {
+            Ok(ResultSet::Scan {
+                columns: table.columns.into_iter().map(|c| c.name).collect(),
+                rows: vec![row],
+            })
+        } else {
+            Ok(ResultSet::Scan {
+                columns: table.columns.into_iter().map(|c| c.name).collect(),
+                rows: Vec::new(),
+            })
+        }
+    }
+}

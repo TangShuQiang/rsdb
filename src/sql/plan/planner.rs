@@ -202,6 +202,16 @@ impl<'a, T: Transaction> Planner<'a, T> {
         let node = match Self::parse_scan_filter(filter.clone()) {
             Some((field, value)) => {
                 let table = self.txn.must_get_table(table_name.clone())?;
+                // 判断是否是主键
+                if table
+                    .columns
+                    .iter()
+                    .position(|c| c.name == field && c.primary_key)
+                    .is_some()
+                {
+                    return Ok(Node::PrimaryKeyScan { table_name, value });
+                }
+
                 match table
                     .columns
                     .iter()
