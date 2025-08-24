@@ -187,11 +187,20 @@ impl<'a, T: Transaction> Planner<'a, T> {
                     ast::JoinType::Cross | ast::JoinType::Inner => false,
                     _ => true,
                 };
-                Node::NestLoopJoin {
-                    left: Box::new(self.build_from_item(*left, filter)?),
-                    right: Box::new(self.build_from_item(*right, filter)?),
-                    predicate,
-                    outer,
+                if join_type == ast::JoinType::Cross {
+                    Node::NestLoopJoin {
+                        left: Box::new(self.build_from_item(*left, filter)?),
+                        right: Box::new(self.build_from_item(*right, filter)?),
+                        predicate,
+                        outer,
+                    }
+                } else {
+                    Node::HashJoin {
+                        left: Box::new(self.build_from_item(*left, filter)?),
+                        right: Box::new(self.build_from_item(*right, filter)?),
+                        predicate,
+                        outer,
+                    }
                 }
             }
         };

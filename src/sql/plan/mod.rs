@@ -105,6 +105,14 @@ pub enum Node {
         table_name: String,
         value: Value,
     },
+
+    // 哈希 Join 节点
+    HashJoin {
+        left: Box<Node>,
+        right: Box<Node>,
+        predicate: Option<Expression>,
+        outer: bool,
+    },
 }
 
 // 执行计划定义，底层是不同类型执行节点

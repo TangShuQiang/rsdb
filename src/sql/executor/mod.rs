@@ -4,7 +4,7 @@ use crate::{
         engine::Transaction,
         executor::{
             agg::Aggregate,
-            join::NestLoopJoin,
+            join::{HashJoin, NestLoopJoin},
             mutation::{Delete, Insert, Update},
             query::{Filter, IndexScan, Limit, Offset, Order, PrimaryKeyScan, Projection, Scan},
             schema::CreateTable,
@@ -63,6 +63,12 @@ impl<T: Transaction + 'static> dyn Executor<T> {
                 value,
             } => IndexScan::new(table_name, field, value),
             Node::PrimaryKeyScan { table_name, value } => PrimaryKeyScan::new(table_name, value),
+            Node::HashJoin {
+                left,
+                right,
+                predicate,
+                outer,
+            } => HashJoin::new(Self::build(*left), Self::build(*right), predicate, outer),
         }
     }
 }

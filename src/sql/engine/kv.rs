@@ -872,7 +872,7 @@ mod tests {
 
     #[test]
     fn test_index() -> RSDBResult<()> {
-        let p = tempfile::tempdir()?.keep().join("sqldb-log");
+        let p = tempfile::tempdir()?.keep().join("rsdb-log");
         let kvengine = KVEngine::new(DiskEngine::new(p.clone())?);
         let mut s = kvengine.session()?;
         s.execute("create table t (a int primary key, b text index, c float index, d bool);")?;
@@ -898,7 +898,7 @@ mod tests {
 
     #[test]
     fn test_primary_key_scan() -> RSDBResult<()> {
-        let p = tempfile::tempdir()?.keep().join("sqldb-log");
+        let p = tempfile::tempdir()?.keep().join("rsdb-log");
         let kvengine = KVEngine::new(DiskEngine::new(p.clone())?);
         let mut s = kvengine.session()?;
         s.execute("create table t (a int primary key, b text index, c float index, d bool);")?;
@@ -909,6 +909,31 @@ mod tests {
         match s.execute("select * from t where a = 2;")? {
             ResultSet::Scan { columns, rows } => {
                 assert_eq!(columns.len(), 4);
+                assert_eq!(rows.len(), 1);
+            }
+            _ => unreachable!(),
+        }
+
+        std::fs::remove_dir_all(p.parent().unwrap())?;
+        Ok(())
+    }
+
+    #[test]
+    fn test_hash_join() -> RSDBResult<()> {
+        let p = tempfile::tempdir()?.keep().join("rsdb-log");
+        let kvengine = KVEngine::new(DiskEngine::new(p.clone())?);
+        let mut s = kvengine.session()?;
+        s.execute("create table t1 (a int primary key);")?;
+        s.execute("create table t2 (b int primary key);")?;
+        s.execute("create table t3 (c int primary key);")?;
+
+        s.execute("insert into t1 values (1), (2), (3);")?;
+        s.execute("insert into t2 values (2), (3), (4);")?;
+        s.execute("insert into t3 values (3), (8), (9);")?;
+
+        match s.execute("select * from t1 join t2 on a = b join t3 on a = c;")? {
+            ResultSet::Scan { columns, rows } => {
+                assert_eq!(columns.len(), 3);
                 assert_eq!(rows.len(), 1);
             }
             _ => unreachable!(),
