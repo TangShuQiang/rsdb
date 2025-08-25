@@ -218,6 +218,18 @@ impl<E: StorageEngine> Transaction for KVTransaction<E> {
         self.txn.set(key, value)
     }
 
+    fn drop_table(&self, table_name: String) -> RSDBResult<()> {
+        let table = self.must_get_table(table_name.clone())?;
+        // 删除表中的所有数据
+        let rows = self.scan_table(&table, None)?;
+        for row in rows {
+            self.delete_row(&table, &table.get_primary_key(&row)?)?;
+        }
+        // 删除表的元信息
+        let key = Key::Table(table_name).encode()?;
+        self.txn.delete(key)
+    }
+
     fn get_table(&self, table_name: String) -> RSDBResult<Option<Table>> {
         let key = Key::Table(table_name).encode()?;
         Ok(self

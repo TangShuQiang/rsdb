@@ -12,6 +12,9 @@ pub enum Statement {
         name: String,
         columns: Vec<Column>,
     },
+    DropTable {
+        name: String,
+    },
     Insert {
         table_name: String,
         columns: Option<Vec<String>>,

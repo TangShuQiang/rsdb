@@ -22,6 +22,11 @@ pub enum Node {
         schema: Table,
     },
 
+    // 删除表
+    DropTable {
+        table_name: String,
+    },
+
     // 插入数据
     Insert {
         table_name: String,

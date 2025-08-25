@@ -7,7 +7,7 @@ use crate::{
             join::{HashJoin, NestLoopJoin},
             mutation::{Delete, Insert, Update},
             query::{Filter, IndexScan, Limit, Offset, Order, PrimaryKeyScan, Projection, Scan},
-            schema::CreateTable,
+            schema::{CreateTable, DropTable},
         },
         plan::Node,
         types::Row,
@@ -29,6 +29,7 @@ impl<T: Transaction + 'static> dyn Executor<T> {
     pub fn build(node: Node) -> Box<dyn Executor<T>> {
         match node {
             Node::CreateTable { schema } => CreateTable::new(schema),
+            Node::DropTable { table_name } => DropTable::new(table_name),
             Node::Insert {
                 table_name,
                 columns,
@@ -79,6 +80,9 @@ pub enum ResultSet {
     CreateTable {
         table_name: String,
     },
+    DropTable {
+        table_name: String,
+    },
     Insert {
         count: usize,
     },
@@ -107,6 +111,7 @@ impl ResultSet {
     pub fn to_string(&self) -> String {
         match self {
             ResultSet::CreateTable { table_name } => format!("CREATE TABLE `{}`", table_name),
+            ResultSet::DropTable { table_name } => format!("DROP TABLE `{}`", table_name),
             ResultSet::Insert { count } => format!("INSERT {} ROWS", count),
             ResultSet::Scan { columns, rows } => {
                 let row_len = rows.len();

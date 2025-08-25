@@ -2,7 +2,6 @@ use std::{collections::BTreeMap, iter::Peekable};
 
 use ast::Column;
 use lexer::{Keyword, Lexer, Token};
-use tokio_util::time::delay_queue::Key;
 
 use super::types::DataType;
 use crate::{
@@ -44,6 +43,7 @@ impl<'a> Parser<'a> {
         // 查看第一个 Token 类型
         match self.peek()? {
             Some(Token::Keyword(Keyword::Create)) => self.parse_ddl(),
+            Some(Token::Keyword(Keyword::Drop)) => self.parse_ddl(),
             Some(Token::Keyword(Keyword::Select)) => self.parse_select(),
             Some(Token::Keyword(Keyword::Insert)) => self.parse_insert(),
             Some(Token::Keyword(Keyword::Update)) => self.parse_update(),
@@ -59,13 +59,8 @@ impl<'a> Parser<'a> {
     // 解析 DDL 语句
     fn parse_ddl(&mut self) -> RSDBResult<ast::Statement> {
         match self.next()? {
-            Token::Keyword(Keyword::Create) => match self.next()? {
-                Token::Keyword(Keyword::Table) => self.parse_ddl_create_table(),
-                token => Err(RSDBError::Parse(format!(
-                    "[Parse] Unexpected token {}",
-                    token
-                ))),
-            },
+            Token::Keyword(Keyword::Create) => self.parse_ddl_create_table(),
+            Token::Keyword(Keyword::Drop) => self.parse_ddl_drop_table(),
             token => Err(RSDBError::Parse(format!(
                 "[Parse] Unexpected token {}",
                 token
@@ -374,6 +369,7 @@ impl<'a> Parser<'a> {
 
     // 解析 Create Table 语句
     fn parse_ddl_create_table(&mut self) -> RSDBResult<ast::Statement> {
+        self.next_expect(Token::Keyword(Keyword::Table))?;
         // 期待是 Table 名
         let table_name = self.next_ident()?;
         // 表名后面是左括号
@@ -391,6 +387,14 @@ impl<'a> Parser<'a> {
         Ok(ast::Statement::CreateTable {
             name: table_name,
             columns,
+        })
+    }
+
+    // 解析 Drop Table 语句
+    fn parse_ddl_drop_table(&mut self) -> RSDBResult<ast::Statement> {
+        self.next_expect(Token::Keyword(Keyword::Table))?;
+        Ok(ast::Statement::DropTable {
+            name: self.next_ident()?,
         })
     }
 

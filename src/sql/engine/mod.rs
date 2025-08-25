@@ -68,7 +68,10 @@ pub trait Transaction {
     fn read_by_pk(&self, table_name: &str, pk: &Value) -> RSDBResult<Option<Row>>;
 
     // DDL 相关操作
+    // 创建表
     fn create_table(&self, table: Table) -> RSDBResult<()>;
+    // 删除表
+    fn drop_table(&self, table_name: String) -> RSDBResult<()>;
     // 获取所有的表名
     fn get_table_names(&self) -> RSDBResult<Vec<String>>;
     // 获取表信息

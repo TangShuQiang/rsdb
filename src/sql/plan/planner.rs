@@ -48,6 +48,7 @@ impl<'a, T: Transaction> Planner<'a, T> {
                         .collect(),
                 },
             },
+            ast::Statement::DropTable { name } => Node::DropTable { table_name: name },
             ast::Statement::Insert {
                 table_name,
                 columns,
